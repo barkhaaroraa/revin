@@ -1,0 +1,20 @@
+# --- Secrets. Nothing in here may ever be committed. ---
+.env
+.env.*
+!.env.example
+
+# Raw traffic captures from DevTools contain LIVE session cookies (li_at, JSESSIONID).
+# A HAR file is a credential. Treat this directory as radioactive.
+capture/
+*.har
+
+# --- Build / deps ---
+node_modules/
+dist/
+*.tsbuildinfo
+
+# --- Misc ---
+.DS_Store
+*.log
+coverage/
+.vitest/

@@ -1,0 +1,11 @@
+{
+  "data": { "*elements": ["urn:li:fsd_profileCertification:(ACoAAATESTPROFILE0001,777)"] },
+  "included": [
+    { "entityUrn": "urn:li:fsd_profileCertification:(ACoAAATESTPROFILE0001,777)",
+      "name": "Test Certification", "authority": "Test Authority",
+      "licenseNumber": "ABC-123", "url": "https://cert.example.invalid/abc",
+      "displaySource": "cert.example.invalid",
+      "dateRange": { "start": { "year": 2022, "month": 6 } },
+      "$type": "com.linkedin.voyager.dash.identity.profile.Certification" }
+  ]
+}

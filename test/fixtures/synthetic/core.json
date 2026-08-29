@@ -1,0 +1,62 @@
+{
+  "_comment": "Hand-written fixture mirroring the exact shape of a real Voyager normalized response. Synthetic on purpose: committing a real person's profile to a public repo would republish their personal data. Shapes here were copied from live captures; values are invented.",
+  "data": {
+    "data": {
+      "identityDashProfilesByMemberIdentity": {
+        "*elements": ["urn:li:fsd_profile:ACoAAATESTPROFILE0001"],
+        "$type": "com.linkedin.restli.common.CollectionResponse"
+      }
+    }
+  },
+  "included": [
+    {
+      "entityUrn": "urn:li:fsd_geo:100000001",
+      "defaultLocalizedName": "Germany",
+      "$type": "com.linkedin.voyager.dash.common.Geo"
+    },
+    {
+      "entityUrn": "urn:li:fsd_geo:100000002",
+      "defaultLocalizedName": "Berlin, Berlin, Germany",
+      "defaultLocalizedNameWithoutCountryName": "Berlin, Berlin",
+      "countryISOCode": "DE",
+      "*country": "urn:li:fsd_geo:100000001",
+      "$type": "com.linkedin.voyager.dash.common.Geo"
+    },
+    {
+      "entityUrn": "urn:li:fsd_profile:ACoAAATESTPROFILE0001",
+      "publicIdentifier": "test-person",
+      "objectUrn": "urn:li:member:999000111",
+      "firstName": "Test",
+      "lastName": "Person",
+      "headline": "Synthetic Profile for Extractor Tests",
+      "premium": true,
+      "influencer": false,
+      "memorialized": false,
+      "geoLocation": {
+        "*geo": "urn:li:fsd_geo:100000002",
+        "$type": "com.linkedin.voyager.dash.identity.profile.ProfileGeoLocation"
+      },
+      "profilePicture": {
+        "displayImageReferenceResolutionResult": {
+          "vectorImage": {
+            "rootUrl": "https://media.example.invalid/dms/image/TESTROOT/",
+            "artifacts": [
+              { "width": 200, "height": 200, "fileIdentifyingUrlPathSegment": "scale_200_200/x/1" },
+              { "width": 800, "height": 800, "fileIdentifyingUrlPathSegment": "scale_800_800/x/1" },
+              { "width": 400, "height": 400, "fileIdentifyingUrlPathSegment": "scale_400_400/x/1" }
+            ]
+          }
+        }
+      },
+      "backgroundPicture": {
+        "displayImageReferenceResolutionResult": {
+          "vectorImage": {
+            "rootUrl": "https://media.example.invalid/dms/image/TESTBG/",
+            "artifacts": [{ "width": 1400, "height": 349, "fileIdentifyingUrlPathSegment": "350_1400/y/1" }]
+          }
+        }
+      },
+      "$type": "com.linkedin.voyager.dash.identity.profile.Profile"
+    }
+  ]
+}

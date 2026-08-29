@@ -1,0 +1,23 @@
+{
+  "data": {
+    "paging": { "count": 20, "start": 0, "total": 2 },
+    "*elements": [
+      "urn:li:fsd_profilePosition:(ACoAAATESTPROFILE0001,111)",
+      "urn:li:fsd_profilePosition:(ACoAAATESTPROFILE0001,222)"
+    ]
+  },
+  "included": [
+    { "entityUrn": "urn:li:fsd_profilePosition:(ACoAAATESTPROFILE0001,222)",
+      "title": "Junior Developer", "companyName": "Older Corp",
+      "companyUrn": "urn:li:fsd_company:2", "employmentTypeUrn": "urn:li:fsd_employmentType:18",
+      "locationName": "Munich", "description": "An earlier role.",
+      "dateRange": { "start": { "year": 2018, "month": 3 }, "end": { "year": 2019, "month": 9 } },
+      "$type": "com.linkedin.voyager.dash.identity.profile.Position" },
+    { "entityUrn": "urn:li:fsd_profilePosition:(ACoAAATESTPROFILE0001,111)",
+      "title": "Staff Engineer", "companyName": "Current Corp",
+      "companyUrn": "urn:li:fsd_company:1", "employmentTypeUrn": "urn:li:fsd_employmentType:1",
+      "locationName": "Berlin", "description": "The current role.",
+      "dateRange": { "start": { "year": 2020, "month": 1 } },
+      "$type": "com.linkedin.voyager.dash.identity.profile.Position" }
+  ]
+}

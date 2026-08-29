@@ -1,0 +1,1721 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found]){display:none!important}</style></head><body>
+<title>Voyager Teardown</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;0,800;1,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+
+<style>
+/* ===================================================================
+   Voyager Teardown
+   Type as thesis: mono = the machine (captured, observed, literal).
+   serif = the analyst (reasoned, argued, prose).
+   =================================================================== */
+
+:root {
+  --ground:   #edeef1;
+  --surface:  #f8f9fb;
+  --sunken:   #e3e5ea;
+  --ink:      #14171d;
+  --ink-soft: #3a414d;
+  --muted:    #5c636f;
+  --faint:    #8b93a1;
+  --rule:     #d3d7de;
+  --rule-hi:  #bcc2cc;
+
+  --accent:    #b0175f;   /* grammar / structure — the delimiters that survive */
+  --accent-bg: #f7e4ed;
+
+  --ok:      #0f6455;
+  --ok-bg:   #ddece8;
+  --warn:    #855400;
+  --warn-bg: #f4e9d3;
+  --stop:    #a32118;
+  --stop-bg: #f6e0dd;
+
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --serif: "Source Serif 4", Charter, "Iowan Old Style", Georgia, serif;
+
+  --col: 34rem;
+  --rail: 13rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:   #101318;
+    --surface:  #171b22;
+    --sunken:   #0a0c10;
+    --ink:      #e2e5ea;
+    --ink-soft: #bcc3ce;
+    --muted:    #8b93a1;
+    --faint:    #666e7c;
+    --rule:     #262b34;
+    --rule-hi:  #39404b;
+
+    --accent:    #ff6ba9;
+    --accent-bg: #331525;
+
+    --ok:      #4cc3ac;
+    --ok-bg:   #0e2b27;
+    --warn:    #e0a73a;
+    --warn-bg: #2e2412;
+    --stop:    #ff7a6b;
+    --stop-bg: #331815;
+  }
+}
+
+:root[data-theme="dark"] {
+  --ground:   #101318;
+  --surface:  #171b22;
+  --sunken:   #0a0c10;
+  --ink:      #e2e5ea;
+  --ink-soft: #bcc3ce;
+  --muted:    #8b93a1;
+  --faint:    #666e7c;
+  --rule:     #262b34;
+  --rule-hi:  #39404b;
+
+  --accent:    #ff6ba9;
+  --accent-bg: #331525;
+
+  --ok:      #4cc3ac;
+  --ok-bg:   #0e2b27;
+  --warn:    #e0a73a;
+  --warn-bg: #2e2412;
+  --stop:    #ff7a6b;
+  --stop-bg: #331815;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection { background: var(--accent); color: var(--ground); }
+
+a { color: inherit; text-decoration-color: var(--rule-hi); text-underline-offset: 3px; }
+a:hover { text-decoration-color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* ---------- shell ------------------------------------------------ */
+
+.shell {
+  display: grid;
+  grid-template-columns: 1fr;
+  max-width: 78rem;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+@media (min-width: 1080px) {
+  .shell {
+    grid-template-columns: var(--rail) minmax(0, 1fr);
+    gap: 3.5rem;
+    padding: 0 2.5rem;
+  }
+}
+
+/* ---------- contents rail ---------------------------------------- */
+
+.rail { display: none; }
+
+@media (min-width: 1080px) {
+  .rail {
+    display: block;
+    position: sticky;
+    top: 0;
+    align-self: start;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 3.25rem 0 3rem;
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.5;
+  }
+}
+
+.rail-head {
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink);
+  padding-bottom: 0.85rem;
+  margin-bottom: 0.85rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.rail ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.55rem; }
+.rail a { display: block; color: var(--muted); text-decoration: none; }
+.rail a:hover { color: var(--accent); }
+.rail .n { color: var(--faint); margin-right: 0.55rem; }
+
+.rail-foot {
+  margin-top: 1.5rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--rule);
+  color: var(--faint);
+  font-size: 10px;
+  line-height: 1.7;
+}
+
+/* ---------- reading column --------------------------------------- */
+
+main { min-width: 0; padding-bottom: 6rem; }
+
+.col { max-width: var(--col); }
+.col > * + * { margin-top: 1.1rem; }
+
+section { padding-top: 3.5rem; }
+section + section { border-top: 1px solid var(--rule); margin-top: 3.5rem; }
+
+/* ---------- typography ------------------------------------------- */
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+  display: flex;
+  align-items: baseline;
+  gap: 0.85rem;
+  margin-bottom: 1rem;
+}
+.eyebrow::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--rule);
+  transform: translateY(-3px);
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--mono);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  text-wrap: balance;
+  margin: 0;
+}
+
+h2 { font-size: clamp(1.5rem, 3.2vw, 1.95rem); }
+h3 {
+  font-size: 1.02rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin-top: 2.5rem;
+}
+h4 {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+}
+
+p { margin: 0; }
+.lede { font-size: 1.16rem; line-height: 1.5; color: var(--ink-soft); }
+
+em { font-style: italic; }
+strong { font-weight: 600; }
+
+code {
+  font-family: var(--mono);
+  font-size: 0.83em;
+  background: var(--sunken);
+  padding: 0.1em 0.34em;
+  border-radius: 2px;
+  word-break: break-word;
+}
+
+.note {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--muted);
+}
+
+/* ---------- hero -------------------------------------------------- */
+
+.hero { padding: 4.5rem 0 0; }
+
+.hero h1 {
+  font-size: clamp(2.4rem, 7vw, 4.1rem);
+  letter-spacing: -0.055em;
+}
+.hero h1 .dim { color: var(--faint); }
+
+.hero-sub {
+  font-size: clamp(1.1rem, 2.4vw, 1.32rem);
+  line-height: 1.45;
+  color: var(--ink-soft);
+  max-width: 38rem;
+  margin-top: 1.4rem;
+}
+
+.stamp {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 1.6rem;
+  margin-bottom: 1.75rem;
+}
+.stamp b { color: var(--accent); font-weight: 700; }
+
+/* ---------- specimen (breakout blocks) ---------------------------- */
+
+.specimen {
+  margin: 2rem 0;
+  max-width: 56rem;
+}
+
+.spec-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 0.6rem;
+}
+
+pre {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.75;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-left: 2px solid var(--accent);
+  padding: 1.15rem 1.3rem;
+  margin: 0;
+  overflow-x: auto;
+  white-space: pre;
+  color: var(--ink-soft);
+}
+pre code { background: none; padding: 0; font-size: inherit; }
+
+/* grammar colouring: structure survives raw, data gets escaped */
+.g  { color: var(--accent); font-weight: 700; }   /* structural delimiter */
+.k  { color: var(--ink); font-weight: 700; }      /* key */
+.v  { color: var(--muted); }                      /* value / payload */
+.esc{ color: var(--ok); font-weight: 700; }       /* percent-escaped */
+.cm { color: var(--faint); font-style: italic; }  /* comment */
+.hit{ color: var(--ok); font-weight: 700; }
+.miss{ color: var(--faint); }
+
+/* ---------- status board ------------------------------------------ */
+
+.board {
+  margin: 2rem 0;
+  max-width: 56rem;
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  overflow-x: auto;
+}
+
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+
+th {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+  text-align: left;
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--rule);
+  white-space: nowrap;
+}
+
+td {
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+  font-family: var(--serif);
+  color: var(--ink-soft);
+  line-height: 1.45;
+}
+tbody tr:last-child td { border-bottom: none; }
+td.path { font-family: var(--mono); font-size: 11.5px; color: var(--ink); white-space: nowrap; }
+td.num { font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 11.5px; }
+
+.pill {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.45rem;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+.pill.ok    { background: var(--ok-bg);   color: var(--ok); }
+.pill.warn  { background: var(--warn-bg); color: var(--warn); }
+.pill.stop  { background: var(--stop-bg); color: var(--stop); }
+.pill.none  { background: var(--sunken);  color: var(--muted); }
+
+/* ---------- result panel ------------------------------------------ */
+
+.result {
+  margin: 2rem 0;
+  max-width: 56rem;
+  border: 1px solid var(--rule);
+  border-left: 2px solid var(--ok);
+  background: var(--surface);
+}
+
+.result-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 1.5rem;
+  padding: 0.9rem 1.3rem;
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.result-head b { color: var(--ok); }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 1px;
+  background: var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+.cell { background: var(--surface); padding: 0.85rem 1rem; }
+.cell .n {
+  font-family: var(--mono);
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  display: block;
+  line-height: 1.1;
+}
+.cell .n.zero { color: var(--faint); }
+.cell .l {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  display: block;
+  margin-top: 0.3rem;
+}
+.result-foot {
+  padding: 0.9rem 1.3rem;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+/* ---------- figures ----------------------------------------------- */
+
+figure {
+  margin: 2.5rem 0;
+  max-width: 60rem;
+}
+figure .frame {
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  padding: 1.5rem 1.25rem;
+  overflow-x: auto;
+}
+figure svg { display: block; width: 100%; height: auto; min-width: 30rem; color: var(--ink); }
+figcaption {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted);
+  margin-top: 0.75rem;
+  max-width: 42rem;
+}
+figcaption b { color: var(--ink); font-weight: 700; }
+
+.svg-box   { fill: none; stroke: currentColor; stroke-width: 1.25; }
+.svg-box-a { fill: none; stroke: var(--accent); stroke-width: 1.75; }
+.svg-box-x { fill: none; stroke: var(--stop); stroke-width: 1.75; }
+.svg-box-k { fill: none; stroke: var(--ok); stroke-width: 1.75; }
+.svg-dash  { fill: none; stroke: currentColor; stroke-width: 1.25; stroke-dasharray: 4 3; opacity: 0.55; }
+.svg-fill  { fill: var(--surface); }
+.svg-sunk  { fill: var(--sunken); stroke: var(--rule); stroke-width: 1; }
+.svg-line  { fill: none; stroke: currentColor; stroke-width: 1.25; }
+.svg-line-a{ fill: none; stroke: var(--accent); stroke-width: 1.75; }
+.svg-line-x{ fill: none; stroke: var(--stop); stroke-width: 1.5; }
+.svg-line-k{ fill: none; stroke: var(--ok); stroke-width: 1.5; }
+.svg-t     { font-family: var(--mono); font-size: 12px; fill: currentColor; }
+.svg-t-b   { font-family: var(--mono); font-size: 12px; font-weight: 700; fill: currentColor; }
+.svg-s     { font-family: var(--mono); font-size: 10px; fill: var(--muted); }
+.svg-s-a   { font-family: var(--mono); font-size: 10px; fill: var(--accent); font-weight: 700; }
+.svg-s-x   { font-family: var(--mono); font-size: 10px; fill: var(--stop); font-weight: 700; }
+.svg-s-k   { font-family: var(--mono); font-size: 10px; fill: var(--ok); font-weight: 700; }
+
+/* ---------- decision cards ---------------------------------------- */
+
+.decks { display: flex; flex-direction: column; gap: 0; max-width: 56rem; margin: 2rem 0 0; }
+
+.deck {
+  border-top: 1px solid var(--rule);
+  padding: 1.75rem 0;
+  display: grid;
+  gap: 1.5rem;
+}
+@media (min-width: 800px) {
+  .deck { grid-template-columns: 1.05fr 1fr; }
+}
+.deck:last-child { border-bottom: 1px solid var(--rule); }
+
+.deck-head { display: flex; flex-direction: column; gap: 0.6rem; }
+.deck-head h3 { margin: 0; }
+.deck-head p { font-size: 15.5px; color: var(--ink-soft); }
+
+.deck-alt { display: flex; flex-direction: column; gap: 0.85rem; margin: 0; }
+
+.alt { display: grid; grid-template-columns: 5.5rem 1fr; gap: 0.75rem; align-items: start; }
+.alt dt {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+  padding-top: 0.25rem;
+}
+.alt dd { margin: 0; font-size: 14.5px; line-height: 1.5; color: var(--ink-soft); }
+.alt dd .why { color: var(--muted); }
+
+.chosen { color: var(--accent); }
+
+/* ---------- concepts ---------------------------------------------- */
+
+.concepts { display: flex; flex-direction: column; gap: 2.25rem; max-width: 56rem; margin-top: 2rem; }
+
+.cgroup { display: grid; gap: 1rem; }
+@media (min-width: 800px) {
+  .cgroup { grid-template-columns: 11rem 1fr; gap: 1.75rem; }
+}
+
+.cgroup-head {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+  line-height: 1.4;
+}
+.cgroup-head span { display: block; color: var(--faint); font-weight: 400; margin-top: 0.35rem; font-size: 10px; letter-spacing: 0.04em; }
+
+.cgroup ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.7rem; }
+.cgroup li { display: grid; gap: 0.15rem; padding-left: 0.9rem; border-left: 1px solid var(--rule); }
+.cgroup li b { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--ink); letter-spacing: -0.01em; }
+.cgroup li span { font-size: 14.5px; line-height: 1.45; color: var(--muted); }
+
+/* ---------- risk list ---------------------------------------------- */
+
+.risks { list-style: none; margin: 2rem 0 0; padding: 0; max-width: 56rem; display: flex; flex-direction: column; }
+.risks li {
+  display: grid;
+  gap: 0.5rem 1.25rem;
+  padding: 1.1rem 0;
+  border-top: 1px solid var(--rule);
+  align-items: start;
+}
+@media (min-width: 720px) {
+  .risks li { grid-template-columns: 6.5rem 1fr; }
+}
+.risks li:last-child { border-bottom: 1px solid var(--rule); }
+.risks b { font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--ink); display: block; margin-bottom: 0.2rem; }
+.risks p { font-size: 15px; color: var(--ink-soft); }
+
+footer {
+  margin-top: 4rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1.8;
+  color: var(--faint);
+  max-width: 56rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+</style>
+
+<div class="shell">
+
+  <!-- ============================ RAIL ============================ -->
+  <nav class="rail" aria-label="Contents">
+    <div class="rail-head">Contents</div>
+    <ol>
+      <li><a href="#state"><span class="n">01</span>Where it stands</a></li>
+      <li><a href="#path"><span class="n">02</span>The fetch path</a></li>
+      <li><a href="#routes"><span class="n">03</span>Two routes in</a></li>
+      <li><a href="#graph"><span class="n">04</span>Graph to record</a></li>
+      <li><a href="#decisions"><span class="n">05</span>Decisions &amp; alternatives</a></li>
+      <li><a href="#gaps"><span class="n">06</span>What's left</a></li>
+      <li><a href="#read"><span class="n">07</span>Concepts to read</a></li>
+    </ol>
+    <div class="rail-foot">
+      reverse-linkedin<br>
+      v0.1.0 &middot; node &ge;22<br>
+      queryIds captured 2026-08-28<br>
+      16 tests passing<br>
+      live run 2026-08-29 &mdash; clean
+    </div>
+  </nav>
+
+  <main>
+
+    <!-- ============================ HERO ============================ -->
+    <header class="hero">
+      <div class="stamp">
+        <span>Engineering teardown</span>
+        <span>Read: <b>22 min</b></span>
+        <span>Status: <b>end-to-end, no server</b></span>
+      </div>
+
+      <h1>Voyager<br><span class="dim">Teardown</span></h1>
+
+      <p class="hero-sub">
+        Turning a LinkedIn profile URL into structured JSON by speaking the private
+        Voyager API directly. The pipeline now runs end to end &mdash; here is what
+        it extracts, which forks in the road were taken, and what to read to follow
+        the reasoning.
+      </p>
+
+      <div class="specimen">
+        <div class="spec-label">The whole problem, in one string</div>
+        <pre><code><span class="cm">/* Rest.li query grammar. Structure stays raw. Data gets escaped. */</span>
+
+variables<span class="g">=(</span><span class="k">profileUrn</span><span class="g">:</span><span class="v">urn</span><span class="esc">%3A</span><span class="v">li</span><span class="esc">%3A</span><span class="v">fsd_profile</span><span class="esc">%3A</span><span class="v">ACoAA&hellip;</span><span class="g">,</span><span class="k">sectionType</span><span class="g">:</span><span class="v">EXPERIENCE</span><span class="g">)</span>
+          <span class="g">^ ^          ^</span>                              <span class="g">^</span>
+          <span class="cm">structural delimiters — these must NOT be encoded</span>
+
+<span class="cm">Encode them all (URLSearchParams) → HTTP 400.
+Encode none of them (raw URN colons) → HTTP 400.
+Encode exactly % : ( ) , inside values only → HTTP 200.</span></code></pre>
+      </div>
+
+      <p class="col note">
+        That asymmetry is not documented anywhere. It was read off a browser request
+        that returned 200 and pinned down in <code>test/restli.test.ts</code> against
+        the captured string, byte for byte.
+      </p>
+    </header>
+
+    <!-- ============================ 01 STATE ============================ -->
+    <section id="state">
+      <div class="col">
+        <div class="eyebrow">01 &mdash; Where it stands</div>
+        <h2>A URL goes in, a typed record comes out</h2>
+        <p class="lede" style="margin-top:1rem">
+          As of the latest run the whole chain works: guard the URL, mint a session,
+          resolve the slug to a URN, pull twelve Rest.li collections, merge them into
+          one entity graph and extract a validated profile record. What is still
+          missing is the HTTP service around it.
+        </p>
+        <p>
+          Three modules landed since the last revision of this page:
+          <code>linkedin/normalized.ts</code> resolves Voyager's URN graph,
+          <code>linkedin/extract.ts</code> maps entities onto our own types, and
+          <code>schema.ts</code> defines that contract in Zod. Sixteen tests pass
+          against synthetic fixtures; <code>tsc --noEmit</code> is clean.
+        </p>
+      </div>
+
+      <div class="board">
+        <table>
+          <thead>
+            <tr><th>Module</th><th>State</th><th>What it does</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="path">security/url-guard.ts</td>
+              <td><span class="pill ok">Working</span></td>
+              <td>Parses untrusted input, extracts the vanity slug, discards everything else.</td>
+            </tr>
+            <tr>
+              <td class="path">security/ip-rules.ts</td>
+              <td><span class="pill ok">Working</span></td>
+              <td>Denies 14 IPv4 and 7 IPv6 ranges by bitwise prefix match, then re-checks with an independent classifier.</td>
+            </tr>
+            <tr>
+              <td class="path">security/ssrf-agent.ts</td>
+              <td><span class="pill ok">Working</span></td>
+              <td>undici dispatcher whose DNS lookup validates every record before the socket opens. 5&nbsp;MB body ceiling.</td>
+            </tr>
+            <tr>
+              <td class="path">linkedin/session.ts</td>
+              <td><span class="pill ok">Working</span></td>
+              <td>Two cookies into a header set LinkedIn answers. Mints a fresh page-instance per view.</td>
+            </tr>
+            <tr>
+              <td class="path">linkedin/client.ts</td>
+              <td><span class="pill ok">Working</span></td>
+              <td>Rest.li query building, manual redirect handling, six-way failure classification.</td>
+            </tr>
+            <tr>
+              <td class="path">linkedin/queries.ts</td>
+              <td><span class="pill warn">Volatile</span></td>
+              <td>queryId hashes and decoration ids captured 2026-08-28. Rotates with every LinkedIn frontend release.</td>
+            </tr>
+            <tr>
+              <td class="path">linkedin/normalized.ts</td>
+              <td><span class="pill ok">New</span></td>
+              <td>The <code>EntityGraph</code>: indexes every response's <code>included[]</code> by URN and resolves references across all of them.</td>
+            </tr>
+            <tr>
+              <td class="path">linkedin/extract.ts</td>
+              <td><span class="pill ok">New</span></td>
+              <td>Anti-corruption layer. Walks the graph and produces our types, never Voyager's.</td>
+            </tr>
+            <tr>
+              <td class="path">schema.ts</td>
+              <td><span class="pill ok">New</span></td>
+              <td>The public contract in Zod: ten sections, partial dates, images, and a coverage report.</td>
+            </tr>
+            <tr>
+              <td class="path">tools/fetch-profile.ts</td>
+              <td><span class="pill ok">Working</span></td>
+              <td>Live capture with human-shaped pacing; aborts on the first block signal. Now drives collections, not cards.</td>
+            </tr>
+            <tr>
+              <td class="path">tools/extract-fixture.ts</td>
+              <td><span class="pill warn">Partial</span></td>
+              <td>Runs the extractors offline with no credentials. Does not print projects, publications, honors or volunteer.</td>
+            </tr>
+            <tr>
+              <td class="path">test/</td>
+              <td><span class="pill warn">Uneven</span></td>
+              <td>16 tests, all passing: 13 on extraction against synthetic fixtures, 3 on the Rest.li encoder. <code>url-guard</code> and <code>ip-rules</code> still have none.</td>
+            </tr>
+            <tr>
+              <td class="path">src/server.ts</td>
+              <td><span class="pill none">Not built</span></td>
+              <td>The Fastify route, API-key auth, cache and upstream budget. Referenced by <code>npm run dev</code> already.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="col">
+        <h3>One live profile, end to end</h3>
+        <p>
+          A real profile was fetched and extracted on 2026-08-29. Fourteen upstream
+          requests, no block signals, no failures. What came back:
+        </p>
+      </div>
+
+      <div class="result">
+        <div class="result-head">
+          <span>Live run &middot; 2026-08-29</span>
+          <span><b>14 requests</b></span>
+          <span><b>0 blocked</b></span>
+          <span><b>0 failed</b></span>
+        </div>
+        <div class="grid">
+          <div class="cell"><span class="n">6</span><span class="l">Positions</span></div>
+          <div class="cell"><span class="n">6</span><span class="l">Position groups</span></div>
+          <div class="cell"><span class="n">2</span><span class="l">Educations</span></div>
+          <div class="cell"><span class="n">12</span><span class="l">Skills</span></div>
+          <div class="cell"><span class="n">4</span><span class="l">Certifications</span></div>
+          <div class="cell"><span class="n">1</span><span class="l">Project</span></div>
+          <div class="cell"><span class="n zero">0</span><span class="l">Languages</span></div>
+          <div class="cell"><span class="n zero">0</span><span class="l">Publications</span></div>
+          <div class="cell"><span class="n zero">0</span><span class="l">Honors</span></div>
+          <div class="cell"><span class="n zero">0</span><span class="l">Volunteer</span></div>
+          <div class="cell"><span class="n zero">0</span><span class="l">Courses</span></div>
+          <div class="cell"><span class="n zero">0</span><span class="l">Organizations</span></div>
+        </div>
+        <div class="result-foot">
+          Identity fields resolved: full name, headline, about (via <code>summary</code>),
+          location + ISO country code, industry, profile URN, numeric member id,
+          premium and influencer flags, 4 profile images (largest 800&times;800) and
+          2 background images.<br>
+          Every position carried title, company name, company URN, employment-type URN,
+          location, a partial start and end date and a computed duration in months.
+        </div>
+      </div>
+
+      <p class="col note">
+        Counts and field names only &mdash; the individual's actual profile content is
+        deliberately not reproduced on this page.
+      </p>
+
+      <div class="specimen">
+        <div class="spec-label">What the twelve collections returned</div>
+        <pre><code>[3] restli   profilePositionGroups        <span class="hit">ok   6x PositionGroup</span>
+[3] restli   profilePositions             <span class="hit">ok   6x Position</span>
+[3] restli   profileEducations            <span class="hit">ok   2x Education</span>
+[3] restli   profileSkills                <span class="hit">ok   12x Skill</span>
+[3] restli   profileCertifications        <span class="hit">ok   4x Certification</span>
+[3] restli   profileLanguages             <span class="miss">-    empty</span>
+
+    ...pausing 8.6s (scrolling)
+
+[3] restli   profileProjects              <span class="hit">ok   1x Project</span>
+[3] restli   profilePublications          <span class="miss">-    empty</span>
+[3] restli   profileHonors                <span class="miss">-    empty</span>
+[3] restli   profileVolunteerExperiences  <span class="miss">-    empty</span>
+[3] restli   profileCourses               <span class="miss">-    empty</span>
+[3] restli   profileOrganizations         <span class="miss">-    empty</span>
+
+<span class="cm">All twelve collection names guessed from Rest.li naming convention
+are live. Six carried data; six answered successfully with nothing.
+None returned 400 or 404 — the convention held.</span></code></pre>
+      </div>
+
+      <p class="col note">
+        That last point is the quiet result. Six collections were inferred from the
+        reference keys on the Profile entity and never verified against a profile
+        that actually populates them &mdash; and all six answered cleanly rather than
+        erroring. The names are right.
+      </p>
+    </section>
+
+    <!-- ============================ 02 PATH ============================ -->
+    <section id="path">
+      <div class="col">
+        <div class="eyebrow">02 &mdash; The fetch path</div>
+        <h2>What happens to a URL</h2>
+        <p class="lede" style="margin-top:1rem">
+          A stranger hands the service a URL and the service makes an HTTP request.
+          That is the textbook SSRF setup, so the pipeline is built so the stranger's
+          string never becomes a fetch target.
+        </p>
+      </div>
+
+      <figure>
+        <div class="frame">
+          <svg viewBox="0 0 960 320" role="img" aria-label="A submitted URL is parsed, the slug is extracted and everything else discarded; the request is rebuilt from a hardcoded template, sent through a DNS-validating dispatcher to Voyager, and the response is classified.">
+            <defs>
+              <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <polygon points="0,1 10,5 0,9" fill="currentColor"/>
+              </marker>
+              <marker id="ar-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <polygon points="0,1 10,5 0,9" fill="var(--accent)"/>
+              </marker>
+              <marker id="ar-x" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <polygon points="0,1 10,5 0,9" fill="var(--stop)"/>
+              </marker>
+            </defs>
+
+            <rect class="svg-dash" x="8" y="34" width="176" height="52" rx="2"/>
+            <text class="svg-t" x="96" y="56" text-anchor="middle">untrusted input</text>
+            <text class="svg-s" x="96" y="72" text-anchor="middle">any string, 2 KB max</text>
+
+            <line class="svg-line" x1="184" y1="60" x2="252" y2="60" marker-end="url(#ar)"/>
+            <text class="svg-s" x="218" y="50" text-anchor="middle">parse</text>
+
+            <rect class="svg-fill svg-box-a" x="254" y="26" width="196" height="68" rx="2"/>
+            <text class="svg-t-b" x="352" y="50" text-anchor="middle">url-guard</text>
+            <text class="svg-s" x="352" y="66" text-anchor="middle">WHATWG URL parser</text>
+            <text class="svg-s" x="352" y="80" text-anchor="middle">host + path + slug checks</text>
+
+            <line class="svg-line-a" x1="450" y1="60" x2="546" y2="60" marker-end="url(#ar-a)"/>
+            <text class="svg-s-a" x="498" y="50" text-anchor="middle">slug only</text>
+
+            <rect class="svg-fill svg-box" x="548" y="26" width="212" height="68" rx="2"/>
+            <text class="svg-t-b" x="654" y="50" text-anchor="middle">request rebuilt</text>
+            <text class="svg-s" x="654" y="66" text-anchor="middle">hardcoded base + template</text>
+            <text class="svg-s" x="654" y="80" text-anchor="middle">+ session headers</text>
+
+            <line class="svg-line-x" x1="352" y1="94" x2="352" y2="140" marker-end="url(#ar-x)"/>
+            <rect class="svg-sunk" x="216" y="142" width="272" height="40" rx="2"/>
+            <text class="svg-s-x" x="352" y="160" text-anchor="middle">DISCARDED</text>
+            <text class="svg-s" x="352" y="174" text-anchor="middle">scheme · host · port · query · fragment</text>
+
+            <path class="svg-line" d="M 760 60 H 900 V 232 H 830" fill="none" marker-end="url(#ar)"/>
+
+            <rect class="svg-fill svg-box-a" x="618" y="206" width="210" height="52" rx="2"/>
+            <text class="svg-t-b" x="723" y="228" text-anchor="middle">safeAgent lookup</text>
+            <text class="svg-s" x="723" y="244" text-anchor="middle">every A/AAAA record checked</text>
+
+            <line class="svg-line" x1="618" y1="232" x2="530" y2="232" marker-end="url(#ar)"/>
+            <text class="svg-s-k" x="574" y="222" text-anchor="middle">public IP</text>
+
+            <rect class="svg-fill svg-box" x="322" y="206" width="206" height="52" rx="2"/>
+            <text class="svg-t-b" x="425" y="228" text-anchor="middle">voyager/api</text>
+            <text class="svg-s" x="425" y="244" text-anchor="middle">redirect: manual</text>
+
+            <line class="svg-line" x1="322" y1="232" x2="234" y2="232" marker-end="url(#ar)"/>
+            <text class="svg-s" x="278" y="222" text-anchor="middle">status</text>
+
+            <rect class="svg-fill svg-box" x="28" y="206" width="204" height="52" rx="2"/>
+            <text class="svg-t-b" x="130" y="228" text-anchor="middle">classify</text>
+            <text class="svg-s" x="130" y="244" text-anchor="middle">6 named failure kinds</text>
+
+            <text class="svg-s" x="723" y="284" text-anchor="middle">private range → SsrfBlockedError, no socket</text>
+            <text class="svg-s" x="425" y="284" text-anchor="middle">3xx is never followed</text>
+            <text class="svg-s" x="130" y="284" text-anchor="middle">999 · 429 · 403 · 404 · login · checkpoint</text>
+          </svg>
+        </div>
+        <figcaption>
+          <b>The input string is destroyed on purpose.</b> Only the slug &mdash; matched
+          against a pattern containing no URL-significant characters &mdash; survives
+          into a request built from a hardcoded template. The perimeter below it exists
+          for the refactor that one day forgets this.
+        </figcaption>
+      </figure>
+
+      <div class="col">
+        <h3>Two cookies, four headers</h3>
+        <p>
+          Authentication is smaller than it looks. <code>li_at</code> is the session.
+          <code>JSESSIONID</code> looks like <code>"ajax:123&hellip;"</code>, quotes
+          included. The <code>csrf-token</code> header is that same value with the
+          quotes stripped &mdash; LinkedIn stores no per-session CSRF token, it just
+          checks that a header matches a cookie.
+        </p>
+        <p>
+          That is the <strong>double-submit cookie</strong> pattern, and it works
+          against a cross-site attacker precisely because the browser attaches the
+          cookie automatically while same-origin policy stops attacker JavaScript from
+          ever reading it. Holding both values off-browser satisfies the check by
+          copying one into the other &mdash; which is exactly why these two strings
+          are a password.
+        </p>
+      </div>
+
+      <div class="specimen">
+        <div class="spec-label">The four headers that matter</div>
+        <pre><code><span class="k">cookie</span><span class="g">:</span> <span class="v">li_at=&lt;session&gt;; JSESSIONID="ajax:123…"</span>
+<span class="k">csrf-token</span><span class="g">:</span> <span class="v">ajax:123…</span>              <span class="cm">← same value, quotes stripped</span>
+<span class="k">x-restli-protocol-version</span><span class="g">:</span> <span class="v">2.0.0</span>   <span class="cm">← omit → (a:b) parsed under v1 rules, silently</span>
+<span class="k">accept</span><span class="g">:</span> <span class="v">application/vnd.linkedin.normalized+json+2.1</span>
+
+<span class="cm">The accept header is load-bearing. It swaps a deeply nested document
+for a flat included[] array plus a tree of URN references — which is
+exactly the shape normalized.ts is built to walk.</span></code></pre>
+      </div>
+
+      <div class="col">
+        <h3>Paced like a person, not a script</h3>
+        <p>
+          The capture that seeded this project showed 49 requests over 164 seconds:
+          tight bursts under half a second apart, separated by pauses of 4, 8, 31,
+          43 and 48 seconds. That is someone scrolling and reading.
+        </p>
+        <p>
+          So <code>fetch-profile.ts</code> fires the core query, the full profile and
+          the first six collections in a burst, pauses 5&ndash;9 seconds as if
+          scrolling, then fires the remaining six. The live run took roughly 25
+          seconds for fourteen requests and drew no block signal. A uniform delay
+          between every request would be <em>less</em> human than this, not more.
+        </p>
+      </div>
+    </section>
+
+    <!-- ============================ 03 ROUTES ============================ -->
+    <section id="routes">
+      <div class="col">
+        <div class="eyebrow">03 &mdash; Two routes in</div>
+        <h2>Component tree vs typed entity</h2>
+        <p class="lede" style="margin-top:1rem">
+          There were two ways to ask Voyager for a profile's sections. They return
+          fundamentally different things, and picking the right one decided whether
+          the extractors would be a hundred lines or a thousand.
+        </p>
+      </div>
+
+      <figure>
+        <div class="frame">
+          <svg viewBox="0 0 960 400" role="img" aria-label="The GraphQL card route returns a UI component tree whose meaning is positional, and in the capture returned a recommendations widget instead of the section; the Rest.li collection route returns typed Position and Skill entities with named fields.">
+            <defs>
+              <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <polygon points="0,1 10,5 0,9" fill="currentColor"/>
+              </marker>
+              <marker id="ar2-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <polygon points="0,1 10,5 0,9" fill="var(--accent)"/>
+              </marker>
+            </defs>
+
+            <rect class="svg-fill svg-box" x="356" y="10" width="248" height="46" rx="2"/>
+            <text class="svg-t-b" x="480" y="32" text-anchor="middle">profileUrn</text>
+            <text class="svg-s" x="480" y="47" text-anchor="middle">urn:li:fsd_profile:ACoAA…</text>
+
+            <path class="svg-dash" d="M 420 56 V 78 H 210 V 100" marker-end="url(#ar2)"/>
+            <path class="svg-line-a" d="M 540 56 V 78 H 750 V 100" marker-end="url(#ar2-a)"/>
+
+            <rect class="svg-fill svg-box" x="24" y="102" width="372" height="62" rx="2" opacity="0.6"/>
+            <text class="svg-t-b" x="210" y="124" text-anchor="middle" opacity="0.6">GraphQL card route — RETIRED</text>
+            <text class="svg-s" x="210" y="140" text-anchor="middle">/graphql?queryId=…ProfileCards</text>
+            <text class="svg-s" x="210" y="154" text-anchor="middle">variables=(profileUrn:…,sectionType:EXPERIENCE)</text>
+
+            <line class="svg-dash" x1="210" y1="164" x2="210" y2="196" marker-end="url(#ar2)"/>
+            <text class="svg-s" x="222" y="184" text-anchor="start">returned</text>
+
+            <rect class="svg-sunk" x="24" y="198" width="372" height="122" rx="2"/>
+            <text class="svg-t" x="44" y="220" text-anchor="start">entityComponent</text>
+            <text class="svg-s" x="60" y="240" text-anchor="start">title    → "Founder and CEO"</text>
+            <text class="svg-s" x="60" y="256" text-anchor="start">subtitle → "NVIDIA · Full-time"</text>
+            <text class="svg-s" x="60" y="272" text-anchor="start">caption  → "Jan 1993 – Present · 32 yrs"</text>
+            <text class="svg-s" x="60" y="288" text-anchor="start">metadata → "Santa Clara, California"</text>
+            <text class="svg-s-x" x="44" y="310" text-anchor="start">meaning is positional — no companyName field</text>
+
+            <rect class="svg-sunk" x="24" y="336" width="372" height="44" rx="2"/>
+            <text class="svg-s-x" x="210" y="354" text-anchor="middle">AND IT RETURNED THE WRONG WIDGET</text>
+            <text class="svg-s" x="210" y="370" text-anchor="middle">a PYMK panel, 0 section rows — dropped from the path</text>
+
+            <rect class="svg-fill svg-box-a" x="564" y="102" width="372" height="62" rx="2"/>
+            <text class="svg-t-b" x="750" y="124" text-anchor="middle">Rest.li collections — PRIMARY</text>
+            <text class="svg-s" x="750" y="140" text-anchor="middle">/identity/dash/profilePositions</text>
+            <text class="svg-s" x="750" y="154" text-anchor="middle">?q=viewee&amp;profileUrn=…</text>
+
+            <line class="svg-line-a" x1="750" y1="164" x2="750" y2="196" marker-end="url(#ar2-a)"/>
+            <text class="svg-s-a" x="762" y="184" text-anchor="start">returns</text>
+
+            <rect class="svg-sunk" x="564" y="198" width="372" height="122" rx="2"/>
+            <text class="svg-t" x="584" y="220" text-anchor="start">included[] : Position</text>
+            <text class="svg-s" x="600" y="240" text-anchor="start">title            → "Co-Founder"</text>
+            <text class="svg-s" x="600" y="256" text-anchor="start">companyName      → "&lt;company&gt;"</text>
+            <text class="svg-s" x="600" y="272" text-anchor="start">*company         → urn:li:fsd_company:…</text>
+            <text class="svg-s" x="600" y="288" text-anchor="start">dateRange        → { start:{year,month} }</text>
+            <text class="svg-s-k" x="584" y="310" text-anchor="start">meaning is named — read the field, done</text>
+
+            <rect class="svg-sunk" x="564" y="336" width="372" height="44" rx="2"/>
+            <text class="svg-s-k" x="750" y="354" text-anchor="middle">ALL 12 COLLECTION NAMES CONFIRMED LIVE</text>
+            <text class="svg-s" x="750" y="370" text-anchor="middle">6 with data, 6 empty, 0 errors on the latest run</text>
+          </svg>
+        </div>
+        <figcaption>
+          <b>The left path is gone.</b> It handed back a serialised UI tree where
+          <code>subtitle</code> means &ldquo;company and employment type joined by a
+          separator&rdquo; only by convention &mdash; and in practice returned a
+          recommendations widget instead of the requested section.
+          <code>fetchCard()</code> survives on the client as a fallback but nothing
+          calls it.
+        </figcaption>
+      </figure>
+
+      <div class="col">
+        <h3>How the collection route was found</h3>
+        <p>
+          Not by guessing endpoint names. The HAR capture contained one non-GraphQL
+          call shaped <code>/identity/dash/profiles/&lt;urn&gt;?decorationId=&hellip;FullProfile-76</code>,
+          which proved the <code>identity/dash/&lt;collection&gt;</code> pattern was
+          live. That projection returns the profile's scalar fields but no positions
+          or educations &mdash; so those had to be separate collections.
+        </p>
+        <p>
+          Rest.li exposes collections through named finders selected by <code>q=</code>,
+          and the collection names mirror the reference keys visible on the Profile
+          entity itself: <code>*profilePositionGroups</code>, <code>*experienceCard</code>,
+          <code>*educationCard</code>. Twelve were inferred from that convention. The
+          latest run confirms every one of them resolves &mdash; the six that returned
+          nothing answered <em>successfully</em> with nothing rather than 400.
+        </p>
+        <p>
+          The <code>FullProfile</code> projection earns its place separately: it is the
+          only source of <code>summary</code>, which is the About section. The GraphQL
+          vanityName query does not return it at all.
+        </p>
+      </div>
+    </section>
+
+    <!-- ============================ 04 GRAPH ============================ -->
+    <section id="graph">
+      <div class="col">
+        <div class="eyebrow">04 &mdash; Graph to record</div>
+        <h2>Fourteen responses, one entity graph</h2>
+        <p class="lede" style="margin-top:1rem">
+          Voyager's normalized representation is a flat graph, not a document.
+          Everything lives in <code>included[]</code>, and the tree points at it by
+          URN string. Reading it is a two-step: index, then walk.
+        </p>
+        <p>
+          On the live run, eight saved responses carried 43 <code>included[]</code>
+          rows that merged into 41 unique entities &mdash; the same
+          <code>Geo</code> objects appear in more than one response. Merging every
+          response into one graph means an entity resolves no matter which call
+          happened to carry it.
+        </p>
+      </div>
+
+      <figure>
+        <div class="frame">
+          <svg viewBox="0 0 960 380" role="img" aria-label="Ordering lives in the data object's starred elements array, not in the included array; and a location requires following two reference hops through the graph.">
+            <defs>
+              <marker id="ar4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <polygon points="0,1 10,5 0,9" fill="currentColor"/>
+              </marker>
+              <marker id="ar4-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <polygon points="0,1 10,5 0,9" fill="var(--accent)"/>
+              </marker>
+              <marker id="ar4-x" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <polygon points="0,1 10,5 0,9" fill="var(--stop)"/>
+              </marker>
+            </defs>
+
+            <!-- PANEL A : ordering -->
+            <text class="svg-s-a" x="16" y="18" text-anchor="start">A — ORDER LIVES IN *ELEMENTS, NOT IN INCLUDED[]</text>
+            <line class="svg-line-a" x1="16" y1="26" x2="944" y2="26" opacity="0.3"/>
+
+            <rect class="svg-sunk" x="16" y="42" width="286" height="112" rx="2"/>
+            <text class="svg-t-b" x="32" y="64" text-anchor="start">data["*elements"]</text>
+            <text class="svg-s" x="32" y="84" text-anchor="start">[ …Position:(…,301),</text>
+            <text class="svg-s" x="32" y="100" text-anchor="start">  …Position:(…,214),</text>
+            <text class="svg-s" x="32" y="116" text-anchor="start">  …Position:(…,199) ]</text>
+            <text class="svg-s-a" x="32" y="140" text-anchor="start">reverse chronological</text>
+
+            <rect class="svg-sunk" x="330" y="42" width="286" height="112" rx="2"/>
+            <text class="svg-t-b" x="346" y="64" text-anchor="start">included[]</text>
+            <text class="svg-s" x="346" y="84" text-anchor="start">[ Position 199,</text>
+            <text class="svg-s" x="346" y="100" text-anchor="start">  Position 301,</text>
+            <text class="svg-s" x="346" y="116" text-anchor="start">  Position 214, Company, Geo… ]</text>
+            <text class="svg-s-x" x="346" y="140" text-anchor="start">no meaningful order</text>
+
+            <line class="svg-line-a" x1="302" y1="98" x2="328" y2="98" marker-end="url(#ar4-a)"/>
+
+            <line class="svg-line-a" x1="616" y1="98" x2="700" y2="98" marker-end="url(#ar4-a)"/>
+            <text class="svg-s-a" x="658" y="88" text-anchor="middle">resolve</text>
+
+            <rect class="svg-fill svg-box-k" x="702" y="60" width="242" height="76" rx="2"/>
+            <text class="svg-t-b" x="823" y="84" text-anchor="middle">graph.elements()</text>
+            <text class="svg-s" x="823" y="102" text-anchor="middle">walks *elements, looks each</text>
+            <text class="svg-s" x="823" y="118" text-anchor="middle">URN up in the index</text>
+
+            <text class="svg-s-x" x="16" y="176" text-anchor="start">Reading included[] directly would scramble a work history that is supposed to be reverse chronological.</text>
+
+            <!-- PANEL B : reference hops -->
+            <text class="svg-s-a" x="16" y="226" text-anchor="start">B — A LOCATION IS TWO REFERENCE HOPS</text>
+            <line class="svg-line-a" x1="16" y1="234" x2="944" y2="234" opacity="0.3"/>
+
+            <rect class="svg-fill svg-box" x="16" y="252" width="200" height="52" rx="2"/>
+            <text class="svg-t-b" x="116" y="274" text-anchor="middle">Profile</text>
+            <text class="svg-s" x="116" y="290" text-anchor="middle">geoLocation</text>
+
+            <line class="svg-line" x1="216" y1="278" x2="288" y2="278" marker-end="url(#ar4)"/>
+            <text class="svg-s" x="252" y="268" text-anchor="middle">*geo</text>
+
+            <rect class="svg-fill svg-box" x="290" y="252" width="228" height="52" rx="2"/>
+            <text class="svg-t-b" x="404" y="274" text-anchor="middle">Geo</text>
+            <text class="svg-s" x="404" y="290" text-anchor="middle">defaultLocalizedName, ISO code</text>
+
+            <line class="svg-line" x1="518" y1="278" x2="590" y2="278" marker-end="url(#ar4)"/>
+            <text class="svg-s" x="554" y="268" text-anchor="middle">*country</text>
+
+            <rect class="svg-fill svg-box" x="592" y="252" width="180" height="52" rx="2"/>
+            <text class="svg-t-b" x="682" y="274" text-anchor="middle">Geo (country)</text>
+            <text class="svg-s" x="682" y="290" text-anchor="middle">country name</text>
+
+            <line class="svg-line-k" x1="772" y1="278" x2="836" y2="278" marker-end="url(#ar4)"/>
+            <text class="svg-s-k" x="844" y="270" text-anchor="start">location.full</text>
+            <text class="svg-s-k" x="844" y="286" text-anchor="start">location.country</text>
+
+            <text class="svg-s" x="16" y="336" text-anchor="start">A field may arrive as *geo (a URN string) or as geo (inlined) depending on the projection. follow() accepts either spelling.</text>
+            <text class="svg-s" x="16" y="356" text-anchor="start">The graph has cycles — a Position references a Company which references Positions — so every traversal carries a seen set.</text>
+          </svg>
+        </div>
+        <figcaption>
+          <b>Two things the flat representation hides.</b> Ordering is carried by the
+          reference array, not the entity array; and a scalar-looking field like
+          &ldquo;location&rdquo; is a two-hop traversal. Both are places where a naive
+          reader silently produces wrong output rather than an error.
+        </figcaption>
+      </figure>
+
+      <div class="col">
+        <h3>Our shape, not theirs</h3>
+        <p>
+          <code>schema.ts</code> is an anti-corruption layer, and that is the whole
+          point of it. LinkedIn's shape is unstable; ours is not. When a field is
+          renamed or a projection bumps its version number, the change is absorbed in
+          the extractors and the published contract does not move. The response is
+          versioned under <code>/v1/</code> so it can.
+        </p>
+        <p>
+          The contract also refuses to invent precision. A LinkedIn date is genuinely
+          partial &mdash; positions carry <code>{year, month}</code>, educations often
+          only <code>{year}</code> &mdash; so <code>PartialDate</code> keeps
+          <code>day</code> nullable rather than padding it to the first of the month.
+          Padding would make a real 1st-of-the-month indistinguishable from a guess.
+        </p>
+      </div>
+
+      <div class="specimen">
+        <div class="spec-label">The coverage contract — how &ldquo;when available&rdquo; is answered precisely</div>
+        <pre><code><span class="k">present</span><span class="g">:</span> <span class="v">string[]</span>   <span class="cm">the section returned entities</span>
+<span class="k">empty</span><span class="g">:</span>   <span class="v">string[]</span>   <span class="cm">upstream answered successfully with nothing —</span>
+                     <span class="cm">the member has none, OR the collection name is</span>
+                     <span class="cm">wrong and fails silently. We cannot tell those</span>
+                     <span class="cm">apart, and say so rather than implying we can.</span>
+<span class="k">failed</span><span class="g">:</span>  <span class="v">{ section, reason }[]</span>  <span class="cm">the request itself errored</span>
+
+<span class="cm">Returning [] for all three would be a lie of omission. A caller needs
+to know the difference between "no certifications" and "we could not
+find out whether there are certifications".</span></code></pre>
+      </div>
+    </section>
+
+    <!-- ============================ 05 DECISIONS ============================ -->
+    <section id="decisions">
+      <div class="col">
+        <div class="eyebrow">05 &mdash; Decisions &amp; alternatives</div>
+        <h2>Forks in the road</h2>
+        <p class="lede" style="margin-top:1rem">
+          Each of these had a cheaper option that would have worked most of the time.
+          The cases where &ldquo;most of the time&rdquo; is not good enough are what
+          the choice is about.
+        </p>
+      </div>
+
+      <div class="decks">
+
+        <div class="deck">
+          <div class="deck-head">
+            <h3>Parse and rebuild, never validate and forward</h3>
+            <p>
+              The guard does not sanitise a URL and pass it along. It parses the input,
+              extracts one field, throws the rest away, and lets the caller rebuild a
+              request from a hardcoded template.
+            </p>
+          </div>
+          <dl class="deck-alt">
+            <div class="alt"><dt class="chosen">Chosen</dt><dd>Extract slug, discard input. <span class="why">A control that structurally cannot fail rather than one that mostly works.</span></dd></div>
+            <div class="alt"><dt>Alt</dt><dd>Validate the URL, then fetch it. <span class="why">Every published bypass &mdash; userinfo, backslash, tab-stripping, double encoding &mdash; targets exactly this shape.</span></dd></div>
+            <div class="alt"><dt>Alt</dt><dd>Regex the URL apart. <span class="why">Hand-rolled URL splitting is the single most reliable source of these bugs. <code>new URL()</code> also lowercases the host and punycodes IDN homographs for free.</span></dd></div>
+            <div class="alt"><dt>Cost</dt><dd>Only <code>/in/&lt;slug&gt;</code> works. Company pages, jobs and posts each need their own parser.</dd></div>
+          </dl>
+        </div>
+
+        <div class="deck">
+          <div class="deck-head">
+            <h3>Validate inside the lookup the socket actually uses</h3>
+            <p>
+              The naive SSRF check resolves the hostname, inspects the address, then
+              calls fetch &mdash; which resolves again. An attacker serving a 0-second
+              TTL answers public first and loopback second.
+            </p>
+          </div>
+          <dl class="deck-alt">
+            <div class="alt"><dt class="chosen">Chosen</dt><dd>Supply undici's <code>lookup</code>. Resolve once, validate every record, hand back that same answer. <span class="why">There is no second lookup to poison.</span></dd></div>
+            <div class="alt"><dt>Alt</dt><dd>Pre-flight <code>dns.resolve</code>. <span class="why">The classic TOCTOU. Protects nothing against rebinding.</span></dd></div>
+            <div class="alt"><dt>Alt</dt><dd>Hostname allowlist only. <span class="why">Meaningless at the IP layer &mdash; <code>evil.com</code> can hold an A record for 127.0.0.1.</span></dd></div>
+            <div class="alt"><dt>Alt</dt><dd>Egress firewall / NAT policy. <span class="why">Genuinely stronger, and orthogonal. Worth adding in production; it just cannot live in the repo.</span></dd></div>
+          </dl>
+        </div>
+
+        <div class="deck">
+          <div class="deck-head">
+            <h3>Fail closed on any bad record, not the first good one</h3>
+            <p>
+              A multi-record answer where <em>any</em> address is private is rejected
+              outright, rather than selecting a permitted one.
+            </p>
+          </div>
+          <dl class="deck-alt">
+            <div class="alt"><dt class="chosen">Chosen</dt><dd>Reject the whole answer. <span class="why">A rebinding attacker can return a public and a private address together and let the client's selection logic pick wrong.</span></dd></div>
+            <div class="alt"><dt>Alt</dt><dd>Filter to the allowed records. <span class="why">Introduces a selection step the attacker gets to influence.</span></dd></div>
+            <div class="alt"><dt>Note</dt><dd>Unparseable, empty and non-unicast answers all reject too. Failing closed is the only correct default in a security check.</dd></div>
+          </dl>
+        </div>
+
+        <div class="deck">
+          <div class="deck-head">
+            <h3>Never follow a redirect</h3>
+            <p>
+              undici is configured with no redirect handling and every call sets
+              <code>redirect: 'manual'</code>, so a 3xx arrives as an ordinary response
+              and the client decides what it means.
+            </p>
+          </div>
+          <dl class="deck-alt">
+            <div class="alt"><dt class="chosen">Chosen</dt><dd>Classify, never follow. <span class="why">For Voyager a redirect is never data &mdash; it is a dead session or a challenge. It also leaves <code>302 → 169.254.169.254</code> nowhere to go.</span></dd></div>
+            <div class="alt"><dt>Alt</dt><dd>Follow with a hop limit. <span class="why">Re-validating each hop is doable, but the first URL being safe says nothing about the third.</span></dd></div>
+            <div class="alt"><dt>Payoff</dt><dd>Six honest failure kinds instead of one opaque error. A login redirect and a checkpoint redirect mean very different things &mdash; one is a stale cookie, the other is a flagged account.</dd></div>
+          </dl>
+        </div>
+
+        <div class="deck">
+          <div class="deck-head">
+            <h3>Merge every response into one graph</h3>
+            <p>
+              A profile fetch makes fourteen calls whose <code>included[]</code> arrays
+              overlap heavily. They are indexed into a single URN-keyed map rather than
+              parsed one at a time.
+            </p>
+          </div>
+          <dl class="deck-alt">
+            <div class="alt"><dt class="chosen">Chosen</dt><dd>One graph, later responses win on conflict. <span class="why">An entity resolves regardless of which call carried it. On the live run 43 rows collapsed to 41 unique entities.</span></dd></div>
+            <div class="alt"><dt>Alt</dt><dd>Parse each response independently. <span class="why">A Company referenced by a Position but only <em>included</em> in the education response would silently resolve to nothing.</span></dd></div>
+            <div class="alt"><dt>Alt</dt><dd>First write wins. <span class="why">A sparse duplicate would overwrite a full projection and quietly lose fields.</span></dd></div>
+          </dl>
+        </div>
+
+        <div class="deck">
+          <div class="deck-head">
+            <h3>Resolve through <code>*elements</code>, never <code>included[]</code></h3>
+            <p>
+              Rest.li collections put the order in the reference array and the content
+              in the entity array. Only one of them is ordered.
+            </p>
+          </div>
+          <dl class="deck-alt">
+            <div class="alt"><dt class="chosen">Chosen</dt><dd>Walk <code>data['*elements']</code> and look each URN up. <span class="why">Preserves the reverse-chronological order LinkedIn intends.</span></dd></div>
+            <div class="alt"><dt>Alt</dt><dd>Iterate <code>included[]</code> and filter by <code>$type</code>. <span class="why">Simpler, and scrambles a work history without ever erroring.</span></dd></div>
+            <div class="alt"><dt>Detail</dt><dd>Some projections inline the element instead of referencing it, so the resolver accepts both.</dd></div>
+          </dl>
+        </div>
+
+        <div class="deck">
+          <div class="deck-head">
+            <h3>Match <code>$type</code> by suffix</h3>
+            <p>
+              Entity lookups compare against <code>profile.Position</code>, not the
+              fully-qualified <code>com.linkedin.voyager.dash.identity.profile.Position</code>.
+            </p>
+          </div>
+          <dl class="deck-alt">
+            <div class="alt"><dt class="chosen">Chosen</dt><dd>Suffix match. <span class="why">The package path shifts between API versions; the leaf name is stable.</span></dd></div>
+            <div class="alt"><dt>Alt</dt><dd>Exact match on the full type. <span class="why">Correct and brittle &mdash; it breaks on a namespace move that changed nothing real.</span></dd></div>
+            <div class="alt"><dt>Cost</dt><dd>A future <code>somethingelse.Position</code> would collide. Acceptable today; worth a comment when it stops being.</dd></div>
+          </dl>
+        </div>
+
+        <div class="deck">
+          <div class="deck-head">
+            <h3>Return the URN rather than guess the label</h3>
+            <p>
+              Employment type arrives as <code>urn:li:fsd_employmentType:18</code> and
+              nothing in any capture maps that integer to &ldquo;Full-time&rdquo;.
+            </p>
+          </div>
+          <dl class="deck-alt">
+            <div class="alt"><dt class="chosen">Chosen</dt><dd>Expose <code>employmentTypeUrn</code> raw and document the gap. <span class="why">Returning the identifier we have beats fabricating one we do not.</span></dd></div>
+            <div class="alt"><dt>Alt</dt><dd>Infer the table from observed examples. <span class="why">One or two data points would produce a mapping that is wrong for every value nobody happened to capture.</span></dd></div>
+            <div class="alt"><dt>Alt</dt><dd>Drop the field. <span class="why">Throws away information a caller may be able to resolve themselves.</span></dd></div>
+          </dl>
+        </div>
+
+        <div class="deck">
+          <div class="deck-head">
+            <h3>Partial dates stay partial</h3>
+            <p>
+              <code>{year: 2022, month: null, day: null}</code> is returned as-is
+              rather than normalised to an ISO timestamp.
+            </p>
+          </div>
+          <dl class="deck-alt">
+            <div class="alt"><dt class="chosen">Chosen</dt><dd>Keep the shape LinkedIn actually has. <span class="why">Inventing <code>2022-01-01</code> makes a real January 1st indistinguishable from padding.</span></dd></div>
+            <div class="alt"><dt>Alt</dt><dd>Normalise to ISO strings. <span class="why">Friendlier to consume, and lossy in a way the consumer cannot detect or undo.</span></dd></div>
+            <div class="alt"><dt>Observed</dt><dd>Real consequence: a role with year-only dates computes a duration of 0 months. Honest, and visibly odd &mdash; which is the right kind of wrong.</dd></div>
+          </dl>
+        </div>
+
+        <div class="deck">
+          <div class="deck-head">
+            <h3>Coverage as a first-class output</h3>
+            <p>
+              The response reports which sections were present, which came back empty
+              and which failed, instead of returning <code>[]</code> for all three.
+            </p>
+          </div>
+          <dl class="deck-alt">
+            <div class="alt"><dt class="chosen">Chosen</dt><dd>Say what we know and what we do not. <span class="why">&ldquo;No certifications&rdquo; and &ldquo;we could not determine certifications&rdquo; are different answers and callers act on them differently.</span></dd></div>
+            <div class="alt"><dt>Alt</dt><dd>Empty arrays everywhere. <span class="why">Simpler contract, and it silently converts a partial failure into a confident wrong answer.</span></dd></div>
+            <div class="alt"><dt>Honest</dt><dd>The contract cannot distinguish &ldquo;member has none&rdquo; from &ldquo;collection name is wrong and fails silently&rdquo;, and the schema comment says so rather than implying otherwise.</dd></div>
+          </dl>
+        </div>
+
+        <div class="deck">
+          <div class="deck-head">
+            <h3>Validate our own output at the boundary</h3>
+            <p>
+              <code>extract-fixture.ts</code> runs <code>ProfileSchema.parse()</code>
+              on what the extractors produced before printing any of it.
+            </p>
+          </div>
+          <dl class="deck-alt">
+            <div class="alt"><dt class="chosen">Chosen</dt><dd>Parse our own output. <span class="why">Catches extractor bugs at the boundary rather than letting a malformed shape reach a caller.</span></dd></div>
+            <div class="alt"><dt>Alt</dt><dd>Validate upstream input instead. <span class="why">Voyager's shape is the thing we do not control and cannot pin down; ours is.</span></dd></div>
+            <div class="alt"><dt>Note</dt><dd>The 13 extraction tests run entirely against hand-written synthetic fixtures &mdash; no credentials, no network, no real personal data in the repo.</dd></div>
+          </dl>
+        </div>
+
+        <div class="deck">
+          <div class="deck-head">
+            <h3>Capture once, iterate offline</h3>
+            <p>
+              <code>fetch-profile.ts</code> writes every raw response to
+              <code>capture/fixtures/&lt;slug&gt;/</code> so parser work costs zero
+              upstream requests.
+            </p>
+          </div>
+          <dl class="deck-alt">
+            <div class="alt"><dt class="chosen">Chosen</dt><dd>Record, then replay from disk. <span class="why">The single most effective anti-ban measure here. The entire extraction layer was built and debugged against saved JSON.</span></dd></div>
+            <div class="alt"><dt>Alt</dt><dd>Iterate against the live site. <span class="why">This is how a burner account reaches a checkpoint.</span></dd></div>
+            <div class="alt"><dt>Cost</dt><dd>Empty responses are not written to disk, so the fixture path can never reproduce the <code>empty</code> coverage state. See below.</dd></div>
+          </dl>
+        </div>
+
+        <div class="deck">
+          <div class="deck-head">
+            <h3>HTTP client, not a headless browser</h3>
+            <p>
+              The largest fork in the whole project: speak Voyager directly with
+              undici, or drive a real browser with Playwright and read the DOM.
+            </p>
+          </div>
+          <dl class="deck-alt">
+            <div class="alt"><dt class="chosen">Chosen</dt><dd>Direct HTTP. <span class="why">Fourteen requests and about 25 seconds for a full profile, returning JSON. Trivially concurrent.</span></dd></div>
+            <div class="alt"><dt>Alt</dt><dd>Playwright / Puppeteer. <span class="why">Genuinely better on detection &mdash; real TLS, real JS execution. Also 10&ndash;100&times; the cost per profile and a far larger surface to keep alive.</span></dd></div>
+            <div class="alt"><dt>Alt</dt><dd>Browser extension against the user's own session. <span class="why">Sidesteps credential handling entirely, but cannot be a hosted API.</span></dd></div>
+            <div class="alt"><dt>Cost</dt><dd>Node's TLS handshake does not look like a browser's, whatever the User-Agent claims.</dd></div>
+          </dl>
+        </div>
+
+        <div class="deck">
+          <div class="deck-head">
+            <h3>A burner session, not an official integration</h3>
+            <p>
+              Worth stating plainly: this route exists because the supported ones do
+              not cover the use case.
+            </p>
+          </div>
+          <dl class="deck-alt">
+            <div class="alt"><dt class="chosen">Chosen</dt><dd>Cookie session from a burner account, low volume, aggressive caching.</dd></div>
+            <div class="alt"><dt>Alt</dt><dd>LinkedIn's official Marketing / Talent APIs. <span class="why">Partner-gated, and arbitrary profile lookup is not something they grant.</span></dd></div>
+            <div class="alt"><dt>Alt</dt><dd>A commercial profile-data vendor. <span class="why">Buys reliability and moves the compliance question to a third party. Costs per lookup and returns their schema, not the source.</span></dd></div>
+            <div class="alt"><dt>Cost</dt><dd>Terms-of-service exposure, account restriction risk, and a data-protection question that caching makes sharper, not softer.</dd></div>
+          </dl>
+        </div>
+
+      </div>
+
+      <figure>
+        <div class="frame">
+          <svg viewBox="0 0 960 250" role="img" aria-label="The naive SSRF check resolves DNS twice, letting an attacker answer public then loopback; the chosen design resolves once inside the connector's own lookup and validates that same answer.">
+            <defs>
+              <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <polygon points="0,1 10,5 0,9" fill="currentColor"/>
+              </marker>
+              <marker id="ar3-x" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <polygon points="0,1 10,5 0,9" fill="var(--stop)"/>
+              </marker>
+              <marker id="ar3-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <polygon points="0,1 10,5 0,9" fill="var(--accent)"/>
+              </marker>
+            </defs>
+
+            <text class="svg-s-x" x="16" y="20" text-anchor="start">NAIVE — TWO LOOKUPS</text>
+            <line class="svg-line-x" x1="16" y1="28" x2="944" y2="28" opacity="0.35"/>
+
+            <rect class="svg-fill svg-box" x="16" y="44" width="150" height="42" rx="2"/>
+            <text class="svg-t" x="91" y="70" text-anchor="middle">isPrivate() check</text>
+
+            <line class="svg-line-x" x1="166" y1="65" x2="300" y2="65" marker-end="url(#ar3-x)"/>
+            <text class="svg-s" x="233" y="56" text-anchor="middle">lookup #1</text>
+
+            <rect class="svg-sunk" x="302" y="44" width="180" height="42" rx="2"/>
+            <text class="svg-t" x="392" y="70" text-anchor="middle">DNS → 93.184.0.1</text>
+
+            <rect class="svg-fill svg-box" x="16" y="106" width="150" height="42" rx="2"/>
+            <text class="svg-t" x="91" y="132" text-anchor="middle">fetch()</text>
+
+            <line class="svg-line-x" x1="166" y1="127" x2="300" y2="127" marker-end="url(#ar3-x)"/>
+            <text class="svg-s" x="233" y="118" text-anchor="middle">lookup #2</text>
+
+            <rect class="svg-sunk" x="302" y="106" width="180" height="42" rx="2"/>
+            <text class="svg-t" x="392" y="132" text-anchor="middle">DNS → 127.0.0.1</text>
+
+            <line class="svg-line-x" x1="482" y1="127" x2="600" y2="127" marker-end="url(#ar3-x)"/>
+            <rect class="svg-fill svg-box-x" x="602" y="106" width="196" height="42" rx="2"/>
+            <text class="svg-t" x="700" y="132" text-anchor="middle">socket to loopback</text>
+
+            <text class="svg-s-x" x="812" y="99" text-anchor="start">TTL 0 lets the</text>
+            <text class="svg-s-x" x="812" y="113" text-anchor="start">answer change</text>
+            <text class="svg-s-x" x="812" y="127" text-anchor="start">between the two</text>
+            <text class="svg-s-x" x="812" y="141" text-anchor="start">lookups</text>
+
+            <text class="svg-s-a" x="16" y="190" text-anchor="start">CHOSEN — ONE LOOKUP, INSIDE THE CONNECTOR</text>
+            <line class="svg-line-a" x1="16" y1="198" x2="944" y2="198" opacity="0.35"/>
+
+            <rect class="svg-fill svg-box-a" x="16" y="212" width="196" height="34" rx="2"/>
+            <text class="svg-t" x="114" y="234" text-anchor="middle">undici connector</text>
+
+            <line class="svg-line-a" x1="212" y1="229" x2="300" y2="229" marker-end="url(#ar3-a)"/>
+            <rect class="svg-fill svg-box-a" x="302" y="212" width="196" height="34" rx="2"/>
+            <text class="svg-t" x="400" y="234" text-anchor="middle">safeLookup</text>
+
+            <line class="svg-line-a" x1="498" y1="229" x2="586" y2="229" marker-end="url(#ar3-a)"/>
+            <rect class="svg-sunk" x="588" y="212" width="196" height="34" rx="2"/>
+            <text class="svg-t" x="686" y="234" text-anchor="middle">all records checked</text>
+
+            <line class="svg-line-a" x1="784" y1="229" x2="850" y2="229" marker-end="url(#ar3-a)"/>
+            <text class="svg-s-k" x="858" y="226" text-anchor="start">connect to the</text>
+            <text class="svg-s-k" x="858" y="240" text-anchor="start">validated address</text>
+          </svg>
+        </div>
+        <figcaption>
+          <b>The gap between the two arrows is the vulnerability.</b> Moving validation
+          inside the resolution the connection actually uses closes it structurally,
+          rather than narrowing the window.
+        </figcaption>
+      </figure>
+    </section>
+
+    <!-- ============================ 06 GAPS ============================ -->
+    <section id="gaps">
+      <div class="col">
+        <div class="eyebrow">06 &mdash; What's left</div>
+        <h2>The remaining work, honestly stated</h2>
+        <p class="lede" style="margin-top:1rem">
+          The extraction layer closed the largest open question. What is left is
+          mostly assembly &mdash; plus two real bugs and one thing that cannot be
+          fixed from inside this design.
+        </p>
+      </div>
+
+      <ul class="risks">
+        <li>
+          <div><span class="pill none">To build</span></div>
+          <div>
+            <b>The server itself</b>
+            <p>
+              <code>src/server.ts</code> does not exist. It needs the Fastify route,
+              <code>x-api-key</code> auth, the profile cache
+              (<code>CACHE_TTL_SECONDS</code>) and the upstream budget
+              (<code>UPSTREAM_MIN_INTERVAL_MS</code> plus jitter). All four are already
+              specified in <code>config.ts</code>; none are wired up. This is the last
+              structural piece.
+            </p>
+          </div>
+        </li>
+        <li>
+          <div><span class="pill stop">Bug</span></div>
+          <div>
+            <b>The <code>empty</code> coverage state is unreachable</b>
+            <p>
+              <code>fetch-profile.ts</code> deliberately does not write empty
+              collections to disk, and <code>extract.ts</code> records no coverage at
+              all for a response that is <code>undefined</code>. So a fixture-driven
+              extraction reports <code>empty: (none)</code> even when six collections
+              genuinely came back empty upstream &mdash; the signal is printed to the
+              console at fetch time and then lost. The server path must pass the empty
+              responses through in memory, or <code>fetch-profile</code> must persist
+              them.
+            </p>
+          </div>
+        </li>
+        <li>
+          <div><span class="pill warn">Gap</span></div>
+          <div>
+            <b>Four extracted sections are never printed</b>
+            <p>
+              <code>extract-fixture.ts</code> reports identity, experience, education,
+              skills, certifications, languages and featured &mdash; but not projects,
+              publications, honors or volunteer. The live run extracted a project that
+              never appeared in the output. The extractor is fine; the reporting tool
+              is incomplete.
+            </p>
+          </div>
+        </li>
+        <li>
+          <div><span class="pill warn">Coverage</span></div>
+          <div>
+            <b>The security modules are still untested</b>
+            <p>
+              16 tests pass: 13 on extraction, 3 on the Rest.li encoder.
+              <code>url-guard</code> and <code>ip-rules</code> have none &mdash; and
+              they are the two files where a regression is silent and serious. Every
+              bypass named in their comments is a test waiting to be written.
+            </p>
+          </div>
+        </li>
+        <li>
+          <div><span class="pill warn">Certain</span></div>
+          <div>
+            <b>The queryId hash will rotate</b>
+            <p>
+              Only one is still load-bearing now that the card route is retired:
+              <code>QUERY_PROFILE_BY_VANITY</code>, the slug-to-URN entry point.
+              Everything after it is Rest.li paths, which are far more stable. That is
+              a real reduction in fragility &mdash; the volatile surface went from four
+              hashes plus an enum to one hash.
+            </p>
+          </div>
+        </li>
+        <li>
+          <div><span class="pill stop">Unmitigated</span></div>
+          <div>
+            <b>TLS fingerprinting sees through the headers</b>
+            <p>
+              A User-Agent makes a request look ordinary in a log. It does not defeat
+              serious bot detection. LinkedIn can fingerprint the TLS ClientHello
+              (JA3/JA4) and the HTTP/2 settings frame, and Node's handshake matches no
+              browser regardless of what the header claims. Low volume, human-shaped
+              pacing and internally consistent headers are the actual mitigation &mdash;
+              and the clean run is evidence they are working, not evidence the risk is
+              gone.
+            </p>
+          </div>
+        </li>
+        <li>
+          <div><span class="pill stop">Radioactive</span></div>
+          <div>
+            <b>Captures and fixtures are personal data</b>
+            <p>
+              <code>capture/</code> holds live session cookies in the HARs and real
+              profile records in the fixtures. <code>.gitignore</code> covers
+              <code>capture/</code>, <code>*.har</code> and <code>.env</code>, and
+              <code>redact()</code> strips credentials from anything headed for a log.
+              The test fixtures are synthetic precisely so none of this has to be
+              committed. All of that is one careless command away from being bypassed.
+            </p>
+          </div>
+        </li>
+        <li>
+          <div><span class="pill none">Open</span></div>
+          <div>
+            <b>Legal and data-protection posture is undecided</b>
+            <p>
+              Scraping public profile data sits in genuinely contested territory
+              &mdash; <em>hiQ v. LinkedIn</em> narrowed the CFAA reading but did not
+              touch breach of contract, and says nothing about GDPR obligations once
+              profile data is cached on a server. <code>CACHE_TTL_SECONDS</code> is an
+              engineering knob that carries a retention policy with it.
+            </p>
+          </div>
+        </li>
+      </ul>
+    </section>
+
+    <!-- ============================ 07 READING ============================ -->
+    <section id="read">
+      <div class="col">
+        <div class="eyebrow">07 &mdash; Concepts to read</div>
+        <h2>What to study, and why it matters here</h2>
+        <p class="lede" style="margin-top:1rem">
+          Grouped by the part of the problem they unlock. Every one of these is
+          load-bearing somewhere in the code above.
+        </p>
+      </div>
+
+      <div class="concepts">
+
+        <div class="cgroup">
+          <div class="cgroup-head">Protocol shape<span>why the payload looks like that</span></div>
+          <ul>
+            <li><b>Rest.li protocol 2.0</b><span>LinkedIn's own RPC framework, open-sourced. Its query grammar, compound keys and finder convention are the reason <code>q=viewee</code> and <code>(a:b,c:d)</code> exist at all. Read the wire protocol spec first.</span></li>
+            <li><b>URNs as entity identity</b><span><code>urn:li:fsd_profile:&lt;id&gt;</code> is a typed, globally addressable reference. Once you see the payload as a graph keyed by URN, <code>included[]</code> stops looking arbitrary.</span></li>
+            <li><b>Normalized vs embedded responses</b><span>The <code>vnd.linkedin.normalized+json</code> accept header is the difference between a flat entity table and a nested tree. Compare with JSON:API's <code>included</code> and Redux's normalizr &mdash; same idea, same motivation.</span></li>
+            <li><b>Projections / decorations</b><span><code>decorationId</code> selects which fields come back. It is why the About section lives on one endpoint and not the other.</span></li>
+            <li><b>Persisted GraphQL queries</b><span>A <code>queryId</code> hash instead of a query body: smaller requests, and an allowlist that stops clients sending arbitrary queries. Also why those hashes rotate on every deploy.</span></li>
+            <li><b>Percent-encoding, precisely</b><span>RFC 3986's reserved vs unreserved sets, and why encoding depends on which component a character sits in. Exactly the 400-vs-200 distinction at the top of this page.</span></li>
+          </ul>
+        </div>
+
+        <div class="cgroup">
+          <div class="cgroup-head">Reading the graph<span>turning references back into data</span></div>
+          <ul>
+            <li><b>Normalized client caches</b><span>normalizr, Apollo's <code>InMemoryCache</code>, Relay's store. <code>EntityGraph</code> is a small hand-rolled one, and reading how the real ones handle identity and merging is the fastest way to see what it is missing.</span></li>
+            <li><b>Anti-corruption layer</b><span>The DDD pattern behind <code>schema.ts</code>: an explicit translation boundary so an unstable upstream model cannot leak into yours. This is the idea that makes a volatile API survivable.</span></li>
+            <li><b>Graph traversal with cycles</b><span>A Position references a Company which references Positions. Any resolver that walks this needs a visited set, and the bug it prevents is a hang, not an error.</span></li>
+            <li><b>Modelling partial and uncertain data</b><span>Partial dates, nullable fields, and the general principle that a type should be able to represent &ldquo;unknown&rdquo; without faking a value. Compare EDTF, the extended date/time format.</span></li>
+            <li><b>Parse, don't validate</b><span>Alexis King's essay. Both <code>url-guard</code> and the extractors are the same move: return a narrower type that makes the invalid state unrepresentable, rather than checking and passing the original along.</span></li>
+            <li><b>Schema-first contracts</b><span>Zod at the boundary, and why validating your own output catches a different class of bug than validating your input.</span></li>
+          </ul>
+        </div>
+
+        <div class="cgroup">
+          <div class="cgroup-head">Session &amp; auth<span>why two cookies are a password</span></div>
+          <ul>
+            <li><b>Double-submit cookie CSRF</b><span>Why it works without server state, and why it collapses the moment a client legitimately holds both halves &mdash; precisely this project's position.</span></li>
+            <li><b>SameSite, Secure, HttpOnly</b><span>The attributes that decide whether a session cookie is reachable from JavaScript or a cross-site request. They explain what LinkedIn is defending against and what it is not.</span></li>
+            <li><b>Bearer vs proof-of-possession tokens</b><span><code>li_at</code> is a pure bearer credential: possession is authorisation. Token binding and DPoP are the designs that break that equivalence.</span></li>
+            <li><b>Cookie sharding and stickiness</b><span><code>lidc</code> pins a session to a datacenter. Worth understanding before deciding two cookies are enough.</span></li>
+          </ul>
+        </div>
+
+        <div class="cgroup">
+          <div class="cgroup-head">Traffic analysis<span>how any of this gets discovered</span></div>
+          <ul>
+            <li><b>The HAR format</b><span>An archive of full request/response pairs including headers. Learn to read it directly &mdash; and treat every one you produce as a credential store.</span></li>
+            <li><b>Intercepting proxies</b><span>mitmproxy, Burp, Charles. DevTools shows a browser's traffic; a proxy lets you replay and mutate it, which is how a parameter's meaning gets confirmed.</span></li>
+            <li><b>Bundle spelunking</b><span>Query hashes, enum values and endpoint names are all present in the shipped JavaScript. Source maps, when exposed, turn guessing into reading.</span></li>
+            <li><b>Inference from naming convention</b><span>The twelve collection names were derived from the reference keys on the Profile entity, not guessed. All twelve resolved. Learning to read a framework's conventions is how you predict endpoints you have never seen.</span></li>
+            <li><b>Differential probing</b><span>Change one variable, observe the status code, keep the change that moved it. Slow, paced, and aborting on the first block signal.</span></li>
+          </ul>
+        </div>
+
+        <div class="cgroup">
+          <div class="cgroup-head">Anti-bot<span>what actually identifies a client</span></div>
+          <ul>
+            <li><b>TLS fingerprinting (JA3 / JA4)</b><span>Cipher suites, extensions and their order form a fingerprint before a single HTTP byte is sent. The reason a spoofed User-Agent buys so little.</span></li>
+            <li><b>HTTP/2 fingerprinting</b><span>The Akamai fingerprint: SETTINGS values, window size, header order and priority frames. Another layer beneath the headers you control.</span></li>
+            <li><b>curl-impersonate &amp; friends</b><span>Clients built to reproduce a specific browser's handshake byte for byte. The honest answer to the limitation above &mdash; and an escalation worth weighing carefully.</span></li>
+            <li><b>Behavioural detection</b><span>Request cadence, session length, ordering, coverage. The reason this project bursts and then pauses instead of sleeping uniformly.</span></li>
+            <li><b>Header order and coherence</b><span>Real clients send a stable header order and a self-consistent story. Sec-Fetch metadata, Accept-Language and the device blob all have to agree.</span></li>
+          </ul>
+        </div>
+
+        <div class="cgroup">
+          <div class="cgroup-head">Web security<span>the perimeter, and how it is defeated</span></div>
+          <ul>
+            <li><b>SSRF</b><span>PortSwigger's chapter, then a cloud metadata write-up. <code>169.254.169.254</code> is in the deny list for a specific historical reason worth knowing.</span></li>
+            <li><b>DNS rebinding &amp; TOCTOU</b><span>The check-then-use race generalises far past DNS. Recognising the shape is the transferable skill.</span></li>
+            <li><b>URL parser confusion</b><span>Orange Tsai's <em>A New Era of SSRF</em> and the WHATWG URL spec. Userinfo, backslashes, tab stripping, IDN homographs &mdash; every check in <code>url-guard.ts</code> maps to a published bypass.</span></li>
+            <li><b>Allowlist vs blocklist</b><span>Why <code>endsWith('linkedin.com')</code> accepts <code>evil-linkedin.com</code>, and why subdomain takeover means <code>*.linkedin.com</code> is not safe either.</span></li>
+            <li><b>Decompression bombs &amp; resource limits</b><span>Content-Length is a claim, not a fact. Counting bytes as they arrive is why <code>readCapped</code> exists.</span></li>
+            <li><b>Secrets in transit and at rest</b><span>Credential-shaped log redaction, gitignore hygiene, and why comparing by hash beats printing a value.</span></li>
+          </ul>
+        </div>
+
+        <div class="cgroup">
+          <div class="cgroup-head">Running it<span>what the missing server needs</span></div>
+          <ul>
+            <li><b>Token bucket &amp; leaky bucket</b><span>The upstream budget is a shared resource protecting an account, not a server. Its shape differs from ordinary per-caller API rate limiting.</span></li>
+            <li><b>Jitter and backoff</b><span>Exponential backoff with full jitter &mdash; and the counter-intuitive point that here, evenly spaced retries are the tell.</span></li>
+            <li><b>Circuit breakers</b><span>A checkpoint response means stop, not retry. Open the circuit and stay open; hammering a challenge is how a flagged account becomes a banned one.</span></li>
+            <li><b>Cache keys and TTL</b><span>The most effective ban mitigation available, and the place where a data-retention policy has to be decided.</span></li>
+            <li><b>Contract testing against fixtures</b><span>Captured responses are ground truth that goes stale silently. Something has to notice when the live shape diverges from the synthetic fixtures the tests trust.</span></li>
+            <li><b>Idempotency and request coalescing</b><span>Ten callers asking for the same profile at once should produce one upstream fetch, not ten. Single-flight is a small pattern with a large effect on ban risk.</span></li>
+          </ul>
+        </div>
+
+        <div class="cgroup">
+          <div class="cgroup-head">Standing<span>whether to build it at all</span></div>
+          <ul>
+            <li><b>hiQ Labs v. LinkedIn</b><span>The Ninth Circuit on scraping public data and the CFAA &mdash; and, importantly, what it left untouched on remand.</span></li>
+            <li><b>Contract vs computer-misuse claims</b><span>Terms of service are a separate theory from unauthorised access. Winning one says nothing about the other.</span></li>
+            <li><b>GDPR and personal data</b><span>Publicly visible is not the same as free to store. Lawful basis, purpose limitation and retention all apply the moment a profile is cached.</span></li>
+          </ul>
+        </div>
+
+      </div>
+    </section>
+
+    <footer>
+      reverse-linkedin · v0.1.0 · branch main, no commits yet<br>
+      queryIds and decorations captured 2026-08-28 against the en_US web client<br>
+      Live end-to-end run 2026-08-29 · 14 requests · 0 blocked · 0 failed<br>
+      Page reflects the working tree as of 2026-08-29 · profile content deliberately omitted
+    </footer>
+
+  </main>
+</div>
+
+</body></html>

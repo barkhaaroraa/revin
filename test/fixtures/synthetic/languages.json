@@ -1,0 +1,8 @@
+{
+  "data": { "*elements": ["urn:li:fsd_profileLanguage:(ACoAAATESTPROFILE0001,1)"] },
+  "included": [
+    { "entityUrn": "urn:li:fsd_profileLanguage:(ACoAAATESTPROFILE0001,1)",
+      "name": "German", "proficiency": "NATIVE_OR_BILINGUAL",
+      "$type": "com.linkedin.voyager.dash.identity.profile.Language" }
+  ]
+}

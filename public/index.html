@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LinkedIn Profile API</title>
+<style>
+  :root {
+    --bg: #fbfbfa; --panel: #ffffff; --ink: #1a1a19; --muted: #6b6b66;
+    --line: #e4e4e0; --accent: #2d5bd7; --accent-ink: #ffffff;
+    --bad-bg: #fdf0ee; --bad-ink: #8f2d1c; --bad-line: #f0cfc8;
+    --chip: #f2f2ef;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161614; --panel: #1e1e1c; --ink: #eceae5; --muted: #9a978f;
+      --line: #302f2c; --accent: #6b8fe8; --accent-ink: #10100f;
+      --bad-bg: #2a1714; --bad-ink: #f0a795; --bad-line: #4a2620;
+      --chip: #282725;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.55 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: 40px 20px 80px;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 13.5px; margin: 0 0 28px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 20px; margin-bottom: 18px;
+  }
+  label { display: block; font-size: 12px; font-weight: 600; color: var(--muted);
+          text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+  input {
+    width: 100%; padding: 10px 12px; font: inherit; color: var(--ink);
+    background: var(--bg); border: 1px solid var(--line); border-radius: 7px;
+  }
+  input:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+  .row { margin-bottom: 14px; }
+  button {
+    font: inherit; font-weight: 600; padding: 10px 18px; border: 0;
+    border-radius: 7px; background: var(--accent); color: var(--accent-ink); cursor: pointer;
+  }
+  button:disabled { opacity: .55; cursor: default; }
+  .hint { font-size: 12.5px; color: var(--muted); margin-top: 8px; }
+  .err { background: var(--bad-bg); border: 1px solid var(--bad-line); color: var(--bad-ink);
+         padding: 12px 14px; border-radius: 8px; font-size: 14px; }
+  .err code { font-weight: 700; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .07em;
+       color: var(--muted); margin: 22px 0 10px; font-weight: 600; }
+  .name { font-size: 22px; font-weight: 650; letter-spacing: -0.01em; }
+  .headline { color: var(--ink); margin-top: 2px; }
+  .meta { color: var(--muted); font-size: 13.5px; margin-top: 4px; }
+  .avatar { width: 64px; height: 64px; border-radius: 50%; object-fit: cover;
+            border: 1px solid var(--line); flex: none; background: var(--chip); }
+  .idrow { display: flex; gap: 16px; align-items: center; }
+  .entry { padding: 12px 0; border-top: 1px solid var(--line); }
+  .entry:first-of-type { border-top: 0; }
+  .entry .t { font-weight: 600; }
+  .entry .s { color: var(--muted); font-size: 13.5px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { background: var(--chip); border: 1px solid var(--line); border-radius: 999px;
+          padding: 3px 11px; font-size: 13px; }
+  details { margin-top: 18px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  pre { background: var(--chip); border: 1px solid var(--line); border-radius: 8px;
+        padding: 14px; overflow-x: auto; font-size: 12.5px; line-height: 1.5; margin-top: 10px; }
+  a { color: var(--accent); }
+  .cov { font-size: 12.5px; color: var(--muted); margin-top: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>LinkedIn Profile API</h1>
+  <p class="sub">Paste a public profile URL. The server hits LinkedIn's internal Voyager API directly &mdash; no browser, no headless anything. <a href="/progress">Read the teardown &rarr;</a></p>
+
+  <div class="card">
+    <form id="f">
+      <div class="row">
+        <label for="url">Profile URL</label>
+        <input id="url" type="text" placeholder="https://www.linkedin.com/in/username" spellcheck="false" autofocus>
+      </div>
+      <button id="go" type="submit">Fetch profile</button>
+      <div class="hint" id="hint">Authenticated by a session cookie issued when this page loaded &mdash; the API key stays on the server.</div>
+    </form>
+  </div>
+
+  <div id="out"></div>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const urlEl = $('url'), out = $('out'), go = $('go');
+
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
+    ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+  const d = (x) => x ? (x.month ? `${String(x.month).padStart(2,'0')}/${x.year}` : `${x.year}`) : '';
+  const range = (r) => !r || !r.start ? '' : `${d(r.start)} – ${r.current ? 'Present' : (d(r.end) || '?')}`;
+  const dur = (m) => m == null ? '' : (m >= 12 ? `${Math.floor(m/12)}y ${m%12}m` : `${m}m`);
+
+  function section(title, items, render) {
+    if (!items || !items.length) return '';
+    return `<h2>${esc(title)} (${items.length})</h2>` + items.map(render).join('');
+  }
+
+  function render(res) {
+    const p = res.profile;
+    const avatar = p.images?.profile?.[0]?.url;
+    const loc = p.location?.full || p.location?.short || '';
+
+    let html = '<div class="card">';
+    html += '<div class="idrow">';
+    if (avatar) html += `<img class="avatar" src="${esc(avatar)}" alt="">`;
+    html += '<div>';
+    html += `<div class="name">${esc(p.fullName || p.publicIdentifier)}</div>`;
+    if (p.headline) html += `<div class="headline">${esc(p.headline)}</div>`;
+    const bits = [loc, p.industry].filter(Boolean).join(' · ');
+    if (bits) html += `<div class="meta">${esc(bits)}</div>`;
+    html += '</div></div>';
+
+    if (p.about) html += `<h2>About</h2><div>${esc(p.about)}</div>`;
+
+    html += section('Experience', p.experience, (e) => `
+      <div class="entry">
+        <div class="t">${esc(e.title || '—')}</div>
+        <div class="s">${esc(e.companyName || '')}</div>
+        <div class="s">${esc(range(e.dateRange))}${e.durationMonths != null ? ' · ' + esc(dur(e.durationMonths)) : ''}${e.location ? ' · ' + esc(e.location) : ''}</div>
+      </div>`);
+
+    html += section('Education', p.education, (e) => `
+      <div class="entry">
+        <div class="t">${esc(e.schoolName || '—')}</div>
+        <div class="s">${esc([e.degreeName, e.fieldOfStudy].filter(Boolean).join(', '))}</div>
+        <div class="s">${esc(range(e.dateRange))}</div>
+      </div>`);
+
+    html += section('Certifications', p.certifications, (c) => `
+      <div class="entry">
+        <div class="t">${c.url ? `<a href="${esc(c.url)}" target="_blank" rel="noopener noreferrer">${esc(c.name||'—')}</a>` : esc(c.name||'—')}</div>
+        <div class="s">${esc(c.authority || '')}${c.dateRange?.start ? ' · ' + esc(d(c.dateRange.start)) : ''}</div>
+      </div>`);
+
+    if (p.skills?.length) {
+      html += `<h2>Skills (${p.skills.length})</h2><div class="chips">` +
+        p.skills.map(s => `<span class="chip">${esc(s.name)}</span>`).join('') + '</div>';
+    }
+    if (p.languages?.length) {
+      html += `<h2>Languages (${p.languages.length})</h2><div class="chips">` +
+        p.languages.map(l => `<span class="chip">${esc(l.name)}${l.proficiency ? ' · ' + esc(l.proficiency) : ''}</span>`).join('') + '</div>';
+    }
+    if (p.featured?.length) {
+      html += section('Featured', p.featured, (f) => `
+        <div class="entry"><div class="t">${f.url ? `<a href="${esc(f.url)}" target="_blank" rel="noopener noreferrer">${esc(f.title||f.url)}</a>` : esc(f.title||'—')}</div></div>`);
+    }
+
+    const c = res.coverage || {};
+    html += `<div class="cov">${res.cached ? 'served from cache · ' : ''}fetched ${esc(res.fetchedAt)}<br>`;
+    html += `present: ${esc((c.present||[]).join(', ') || 'none')}`;
+    if (c.empty?.length) html += ` · empty: ${esc(c.empty.join(', '))}`;
+    if (c.failed?.length) html += ` · failed: ${esc(c.failed.map(f=>f.section).join(', '))}`;
+    html += '</div>';
+
+    html += `<details><summary>Raw JSON</summary><pre>${esc(JSON.stringify(res, null, 2))}</pre></details>`;
+    html += '</div>';
+    out.innerHTML = html;
+  }
+
+  $('f').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const url = urlEl.value.trim();
+    if (!url) return;
+
+    go.disabled = true;
+    out.innerHTML = '<div class="card"><span class="meta">Fetching &mdash; a live profile takes a few seconds…</span></div>';
+    try {
+      // No credential in the page. The httpOnly session cookie set when this
+      // page was served rides along with `credentials: same-origin`.
+      const r = await fetch('/v1/profile', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      const body = await r.json();
+      if (!r.ok) {
+        out.innerHTML = `<div class="card"><div class="err"><code>${esc(body.error || r.status)}</code><br>${esc(body.message || '')}${body.hint ? '<br><br>' + esc(body.hint) : ''}</div></div>`;
+      } else {
+        render(body);
+      }
+    } catch (e) {
+      out.innerHTML = `<div class="card"><div class="err">Network error: ${esc(e.message)}</div></div>`;
+    } finally {
+      go.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

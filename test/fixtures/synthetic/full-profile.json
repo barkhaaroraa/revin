@@ -1,0 +1,26 @@
+{
+  "data": {
+    "entityUrn": "urn:li:fsd_profile:ACoAAATESTPROFILE0001",
+    "publicIdentifier": "test-person",
+    "objectUrn": "urn:li:member:999000111",
+    "firstName": "Test",
+    "lastName": "Person",
+    "headline": "Synthetic Profile for Extractor Tests",
+    "summary": "This is the About section. It exists here so the extractor's `summary` path is covered, since the real capture had it null.",
+    "industryUrn": "urn:li:fsd_industry:4",
+    "premium": true,
+    "geoLocation": { "*geo": "urn:li:fsd_geo:100000002" },
+    "location": { "countryCode": "DE" },
+    "$type": "com.linkedin.voyager.dash.identity.profile.Profile"
+  },
+  "included": [
+    { "entityUrn": "urn:li:fsd_industry:4", "name": "Computer Software", "$type": "com.linkedin.voyager.dash.common.Industry" },
+    { "entityUrn": "urn:li:fsd_geo:100000001", "defaultLocalizedName": "Germany", "$type": "com.linkedin.voyager.dash.common.Geo" },
+    { "entityUrn": "urn:li:fsd_geo:100000002", "defaultLocalizedName": "Berlin, Berlin, Germany",
+      "defaultLocalizedNameWithoutCountryName": "Berlin, Berlin", "countryISOCode": "DE",
+      "*country": "urn:li:fsd_geo:100000001", "$type": "com.linkedin.voyager.dash.common.Geo" },
+    { "entityUrn": "urn:li:fsd_treasuryMedia:1", "title": "My Site",
+      "description": "A featured link", "data": { "Url": "https://example.invalid/" },
+      "$type": "com.linkedin.voyager.dash.identity.profile.treasury.TreasuryMedia" }
+  ]
+}

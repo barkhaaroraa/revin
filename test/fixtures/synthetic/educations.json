@@ -1,0 +1,10 @@
+{
+  "data": { "*elements": ["urn:li:fsd_profileEducation:(ACoAAATESTPROFILE0001,555)"] },
+  "included": [
+    { "entityUrn": "urn:li:fsd_profileEducation:(ACoAAATESTPROFILE0001,555)",
+      "schoolName": "Test University", "schoolUrn": "urn:li:fsd_school:9",
+      "degreeName": "BSc", "fieldOfStudy": "Computer Science", "grade": null, "activities": null,
+      "dateRange": { "start": { "year": 2014 }, "end": { "year": 2018 } },
+      "$type": "com.linkedin.voyager.dash.identity.profile.Education" }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "data": { "*elements": ["urn:li:fsd_skill:(ACoAAATESTPROFILE0001,1)", "urn:li:fsd_skill:(ACoAAATESTPROFILE0001,2)"] },
+  "included": [
+    { "entityUrn": "urn:li:fsd_skill:(ACoAAATESTPROFILE0001,1)", "name": "TypeScript", "$type": "com.linkedin.voyager.dash.identity.profile.Skill" },
+    { "entityUrn": "urn:li:fsd_skill:(ACoAAATESTPROFILE0001,2)", "name": "Rust", "$type": "com.linkedin.voyager.dash.identity.profile.Skill" }
+  ]
+}
