@@ -18,8 +18,11 @@ export const VOYAGER_BASE = 'https://www.linkedin.com/voyager/api';
 // ---------------------------------------------------------------------------
 // THE PRIMARY PATH: Rest.li collections.
 //
-// This is the route the extractors are built on, and it is strictly better
-// than the GraphQL card route below.
+// This is the route the extractors are built on, and the only one left. The
+// GraphQL profile-card route it replaced is gone: LinkedIn's own
+// `x-li-pem-metadata` header labelled that queryId
+// `profile-cards-widget-recommendations`, i.e. the People-You-May-Know widget,
+// so it could never have returned profile sections. See progress.md 4a.
 //
 // How it was found: the capture contained one non-GraphQL call shaped
 //   /voyager/api/identity/dash/profiles/<urn>?decorationId=...FullProfile-76
@@ -65,14 +68,41 @@ export const PROFILE_COLLECTIONS = {
 
 export type CollectionKey = keyof typeof PROFILE_COLLECTIONS;
 
-/** Verified returning typed entities against a live profile. */
-export const CONFIRMED_COLLECTIONS: readonly CollectionKey[] = [
+/**
+ * The collections actually requested on a profile fetch.
+ *
+ * Deliberately NOT `Object.keys(PROFILE_COLLECTIONS)`. That map is the record
+ * of every endpoint this project identified — worth keeping as reference — but
+ * fetching all of it cost one upstream request per entry, and several entries
+ * were never confirmed to return anything.
+ *
+ * Dropped: `publications`, `honors`, `volunteer` (extractors exist, but four
+ * live profiles produced zero rows between them) and `courses` (never had an
+ * extractor or a schema field at all — the response was fetched and discarded).
+ *
+ * Each removal is one fewer upstream request per profile, and upstream request
+ * volume is the thing that gets a session challenged. 14 requests per profile
+ * became 10, so the same risk budget buys ~40% more profile fetches.
+ *
+ * `publications`/`honors`/`volunteer` remain in the schema and extractor: a
+ * profile response still carries them as empty arrays, and re-enabling one is
+ * a matter of adding the key back here.
+ *
+ * Confirmed returning typed entities against live profiles: `positionGroups`,
+ * `positions`, `educations`, `skills`, `certifications`, `languages`,
+ * `projects`. The rest are named correctly as far as we can tell but no test
+ * profile has had one, so "correct but empty" and "wrong name, silently empty"
+ * are still indistinguishable.
+ */
+export const FETCHED_COLLECTIONS: readonly CollectionKey[] = [
   'positionGroups',
   'positions',
   'educations',
   'skills',
   'certifications',
   'languages',
+  'projects',
+  'organizations',
 ] as const;
 
 /**
@@ -86,100 +116,9 @@ export const CONFIRMED_COLLECTIONS: readonly CollectionKey[] = [
  * firstName, lastName, headline, publicIdentifier, profilePicture,
  * backgroundPicture, premium/influencer flags, and a `geoLocation` reference.
  *
- * It also returns `*experienceCard` / `*educationCard` pointers, which is how
- * we learned the card URN grammar documented in SECTION_TYPES below.
+ * It also returns `*experienceCard` / `*educationCard` pointers shaped
+ * `urn:li:fsd_profileCard:(<profileId>,<SECTION_TYPE>,<locale>)`, which is how
+ * the card grammar was read rather than guessed. That route is no longer used
+ * (see above), but the URN is what first revealed Rest.li 2.0 compound keys.
  */
 export const QUERY_PROFILE_BY_VANITY = 'voyagerIdentityDashProfiles.34ead06db82a2cc9a778fac97f69ad6a';
-
-/**
- * Alternative step 1: `variables=(memberIdentity:<slug>)`.
- *
- * Returns a smaller projection (22 fields vs 44) but uniquely includes
- * `profileTopPosition`, the current role, resolved as a real
- * `urn:li:fsd_profilePosition:(<profileId>,<positionId>)` entity. Useful as a
- * cross-check when the EXPERIENCE card fails to parse.
- */
-export const QUERY_PROFILE_BY_MEMBER_IDENTITY = 'voyagerIdentityDashProfiles.9bdce5f8ad48e09bdef1f420fbaae9cc';
-
-/**
- * Step 2: profile URN + section -> that section's rendered card.
- *
- * `variables=(profileUrn:<urn>,sectionType:<SECTION_TYPE>)`
- */
-export const QUERY_PROFILE_CARDS = 'voyagerIdentityDashProfileCards.aec4c2601fac8c5f615c7630b8db1ab3';
-
-/** Same idea, finer granularity. Uses lowercase-hyphenated section names. */
-export const QUERY_PROFILE_COMPONENTS = 'voyagerIdentityDashProfileComponents.86824295e1093fb0f5acdd8d57213aaa';
-
-/**
- * Section identifiers for QUERY_PROFILE_CARDS.
- *
- * We did not have to guess these. The core profile response embeds card
- * references shaped like:
- *
- *   urn:li:fsd_profileCard:(ACoAABMznFkB...,EXPERIENCE,en_US)
- *   urn:li:fsd_profileCard:(<profileId>,<SECTION_TYPE>,<locale>)
- *
- * That compound `(a,b,c)` key is Rest.li protocol 2.0 encoding, and reading
- * EXPERIENCE and EDUCATION straight out of it confirmed sectionType is a plain
- * enum. The remaining values follow the same naming convention; each is
- * verified at runtime and simply yields an empty section if wrong.
- */
-export const SECTION_TYPES = {
-  about: 'ABOUT',
-  experience: 'EXPERIENCE',
-  education: 'EDUCATION',
-  skills: 'SKILLS',
-  certifications: 'LICENSES_AND_CERTIFICATIONS',
-  languages: 'LANGUAGES',
-  projects: 'PROJECTS',
-  publications: 'PUBLICATIONS',
-  honors: 'HONORS',
-  volunteer: 'VOLUNTEERING_EXPERIENCE',
-} as const;
-
-export type SectionKey = keyof typeof SECTION_TYPES;
-
-/**
- * The sections we fetch for a normal profile request, in the order a browser
- * would request them. Ordering matters only for looking like a real client.
- */
-export const DEFAULT_SECTIONS: readonly SectionKey[] = [
-  'about',
-  'experience',
-  'education',
-  'skills',
-  'certifications',
-  'languages',
-] as const;
-
-/**
- * A profile section is NOT returned as typed data. It is returned as a
- * serialized UI component tree ("tetris"), and this is the single most
- * important thing to understand about parsing LinkedIn.
- *
- * A Component is a tagged union where exactly one of these keys is non-null.
- * An experience row arrives as an `entityComponent` whose title/subtitle/
- * caption are TextViewModels — meaning the mapping from slot to meaning is
- * POSITIONAL CONVENTION, not a named field:
- *
- *   entityComponent.title    -> "Founder and CEO"
- *   entityComponent.subtitle -> "NVIDIA - Full-time"
- *   entityComponent.caption  -> "Jan 1993 - Present - 32 yrs"
- *   entityComponent.metadata -> "Santa Clara, California"
- *
- * There is no `position.companyName` to read. That is why the extractors must
- * be defensive and why the API response carries a `coverage` field: a section
- * that renders fine in a browser can still fail to yield structured data.
- */
-export const COMPONENT_UNION_KEYS = [
-  'entityComponent',
-  'textComponent',
-  'fixedListComponent',
-  'headerComponent',
-  'carouselComponent',
-  'insightComponent',
-  'completionMeterComponent',
-  'profileContentCollectionsComponent',
-  'wwuAdsComponent',
-] as const;

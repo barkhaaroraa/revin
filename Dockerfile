@@ -23,6 +23,11 @@ COPY --from=build /app/dist ./dist
 # server.ts resolves the UI at `dist/../public`, so this must sit beside dist.
 COPY public ./public
 
+# A default home for BREAKER_STATE_FILE. Created here, owned by `node`, so that
+# mounting a fresh named volume at /data inherits an ownership the unprivileged
+# runtime user can actually write to.
+RUN mkdir -p /data && chown node:node /data
+
 # Never run as root. If the process is ever compromised, this is the difference
 # between "read the app directory" and "own the container".
 USER node

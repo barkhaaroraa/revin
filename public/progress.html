@@ -1004,9 +1004,13 @@ exactly the shape normalized.ts is built to walk.</span></code></pre>
           <b>The left path is gone.</b> It handed back a serialised UI tree where
           <code>subtitle</code> means &ldquo;company and employment type joined by a
           separator&rdquo; only by convention &mdash; and in practice returned a
-          recommendations widget instead of the requested section.
-          <code>fetchCard()</code> survives on the client as a fallback but nothing
-          calls it.
+          recommendations widget instead of the requested section &mdash; which
+          LinkedIn's own <code>x-li-pem-metadata</code> header later explained: that
+          <code>queryId</code> is tagged
+          <code>Voyager - Profile=profile-cards-widget-recommendations</code>, so it
+          could never have returned profile sections.
+          <code>fetchCard()</code> has been deleted; a &ldquo;fallback&rdquo; that
+          structurally cannot return the data is a trap, not a safety net.
         </figcaption>
       </figure>
 

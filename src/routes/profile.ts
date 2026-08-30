@@ -25,7 +25,7 @@ const UPSTREAM_STATUS: Record<string, { status: number; hint: string }> = {
   },
   session_expired: {
     status: 503,
-    hint: 'The server-side LinkedIn session is invalid or expired. An operator must refresh LINKEDIN_LI_AT.',
+    hint: 'The server-side LinkedIn session is invalid or expired. An operator must re-capture a HAR while logged in and run `npx tsx src/tools/sync-cookies.ts <capture.har>` — hand-copying LINKEDIN_LI_AT is what this failure usually is.',
   },
   blocked_by_linkedin: {
     status: 503,
@@ -38,7 +38,12 @@ const UPSTREAM_STATUS: Record<string, { status: number; hint: string }> = {
   upstream_timeout: { status: 504, hint: 'LinkedIn did not respond in time.' },
   upstream_unexpected: {
     status: 502,
-    hint: 'LinkedIn returned something we did not recognise. The persisted queryId may have rotated.',
+    // This hint used to assert the queryId had rotated. That is one cause among
+    // several, and stating it as the likely one sent a real investigation off
+    // after the wrong suspect while the actual message (a redirect) was saying
+    // something else entirely. Name the causes, and point at the log line that
+    // distinguishes them.
+    hint: 'LinkedIn returned something this client does not recognise — a rotated queryId, an unhandled redirect, or a changed response shape. The server log carries the specific signal.',
   },
 };
 
@@ -81,4 +86,37 @@ export function registerProfileRoutes(app: FastifyInstance, service: ProfileServ
   });
 
   app.get('/v1/health', async () => ({ status: 'ok', time: new Date().toISOString() }));
+
+  // --- Operator controls for the upstream breakpoint. ---
+  //
+  // When LinkedIn hard-blocks the session (999 / checkpoint / access-denied),
+  // the breaker opens and the server stops sending upstream requests entirely.
+  // These two routes are how a human inspects that and, deliberately by hand,
+  // authorises resuming — "don't send requests without asking me" made into an
+  // explicit switch. Both sit behind the same x-api-key gate as everything else.
+
+  /** Inspect the breaker without changing it. */
+  app.get('/v1/admin/status', async (_request, reply) => {
+    return reply.status(200).send({ upstream: service.upstreamStatus() });
+  });
+
+  /**
+   * Resume upstream requests after a hard block. This is the ONLY thing that
+   * closes the breaker — nothing re-enables itself automatically, on purpose.
+   */
+  app.post('/v1/admin/resume', async (request, reply) => {
+    const result = service.resumeUpstream();
+    if (result.resumed) {
+      request.log.warn({ event: 'upstream_resumed', cleared: result.cleared }, 'operator resumed upstream after a hard block');
+      return reply.status(200).send({
+        resumed: true,
+        message: 'Upstream breaker cleared. The next request will be sent to LinkedIn.',
+        cleared: result.cleared,
+      });
+    }
+    return reply.status(200).send({
+      resumed: false,
+      message: 'Breaker was already closed; nothing to resume.',
+    });
+  });
 }

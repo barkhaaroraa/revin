@@ -6,17 +6,15 @@
 import { fetch } from 'undici';
 import { MAX_RESPONSE_BYTES, readCapped, safeAgent, SsrfBlockedError } from '../security/ssrf-agent.js';
 import { checkIp } from '../security/ip-rules.js';
+import { createTripStore, UpstreamCircuitBreaker } from '../security/circuit-breaker.js';
 import { redact, type Config } from '../config.js';
 import { buildSession, newPageInstance, type Session } from './session.js';
 import {
   DECORATION_FULL_PROFILE,
   PROFILE_COLLECTIONS,
   QUERY_PROFILE_BY_VANITY,
-  QUERY_PROFILE_CARDS,
-  SECTION_TYPES,
   VOYAGER_BASE,
   type CollectionKey,
-  type SectionKey,
 } from './queries.js';
 
 export type UpstreamFailure =
@@ -80,11 +78,24 @@ export function restliValue(value: string): string {
     .replace(/,/g, '%2C');
 }
 
+/** Injectable safety collaborators, shared with the owning service. */
+export interface ClientDeps {
+  /** The upstream breaker. Defaults to a fresh one; inject to share with routes. */
+  breaker?: UpstreamCircuitBreaker;
+}
+
 export class VoyagerClient {
   private session: Session;
+  private readonly breaker: UpstreamCircuitBreaker;
 
-  constructor(private readonly config: Config) {
+  constructor(
+    private readonly config: Config,
+    deps: ClientDeps = {},
+  ) {
     this.session = buildSession(config);
+    // A breaker built here reloads any trip persisted by a previous process,
+    // so a restart cannot silently resume traffic against a flagged account.
+    this.breaker = deps.breaker ?? new UpstreamCircuitBreaker(createTripStore(config.BREAKER_STATE_FILE));
   }
 
   /**
@@ -102,6 +113,20 @@ export class VoyagerClient {
     });
   }
 
+  /** The shared breaker, so the owning service can expose resume/status. */
+  get circuitBreaker(): UpstreamCircuitBreaker {
+    return this.breaker;
+  }
+
+  /**
+   * Record a hard block (999 / checkpoint / access-denied), trip the breaker,
+   * and return the error to throw.
+   */
+  private hardBlock(detail: string, status?: number): UpstreamError {
+    this.breaker.trip({ detail, status });
+    return new UpstreamError('blocked_by_linkedin', detail, status);
+  }
+
   /**
    * Perform one GET against Voyager.
    *
@@ -113,6 +138,20 @@ export class VoyagerClient {
    * classic `302 -> http://169.254.169.254/` SSRF pivot has nowhere to go.
    */
   private async get(path: string, params: Record<string, string>): Promise<unknown> {
+    // The breakpoint. If a previous request was hard-blocked (999, checkpoint,
+    // or an access-denied authwall), the breaker is open and we refuse to send
+    // ANOTHER request until a human resumes. Checked before the socket opens so
+    // a flagged account is never touched again on its own — retrying a block
+    // only escalates it from "challenged" to "banned".
+    const blocked = this.breaker.blockIfOpen();
+    if (blocked) {
+      throw new UpstreamError(
+        'blocked_by_linkedin',
+        `upstream halted at ${blocked.at} after a hard block (${blocked.detail}); ${blocked.blockedSince} request(s) refused since. Not sending more without an explicit resume — POST /v1/admin/resume to continue.`,
+        blocked.status,
+      );
+    }
+
     const url = `${VOYAGER_BASE}${path}?${restliQuery(params)}`;
 
     let res;
@@ -135,23 +174,44 @@ export class VoyagerClient {
     // --- Failure classification. Each signal means something specific. ---
 
     // 999 is LinkedIn's long-standing "we think you are a bot" status. It is
-    // not in any RFC; it is theirs.
+    // not in any RFC; it is theirs. This is the canonical hard block: trip the
+    // breaker so nothing else goes out until a human resumes.
     if (res.status === 999) {
-      throw new UpstreamError('blocked_by_linkedin', 'LinkedIn returned 999 (bot detection)', 999);
+      throw this.hardBlock('LinkedIn returned 999 (bot detection)', 999);
     }
     if (res.status === 429) {
       throw new UpstreamError('upstream_rate_limited', 'LinkedIn rate limited this session', 429);
     }
     if (res.status >= 300 && res.status < 400) {
       const location = res.headers.get('location') ?? '';
+      // An access-denied authwall is a BLOCK, not a dead session: LinkedIn is
+      // refusing the request rather than telling us the cookie expired. Treat it
+      // like a 999 and stop — the same "don't keep knocking" rule applies.
+      if (/\/authwall/.test(location)) {
+        throw this.hardBlock('redirected to an access-denied authwall', res.status);
+      }
       // A redirect to the login page means li_at is dead or revoked.
-      if (/\/uas\/login|\/login|\/authwall/.test(location)) {
+      if (/\/uas\/login|\/login/.test(location)) {
         throw new UpstreamError('session_expired', 'redirected to login — li_at is invalid or expired', res.status);
       }
       // A checkpoint means the ACCOUNT has been flagged and now needs a
-      // human CAPTCHA. Retrying makes this worse, so we surface it loudly.
+      // human CAPTCHA. Retrying makes this worse, so we surface it loudly and
+      // trip the breaker.
       if (/\/checkpoint/.test(location)) {
-        throw new UpstreamError('blocked_by_linkedin', 'redirected to a checkpoint challenge — the account is flagged', res.status);
+        throw this.hardBlock('redirected to a checkpoint challenge — the account is flagged', res.status);
+      }
+      // The third, sneakiest way a dead session presents — and the one this
+      // classifier originally missed. LinkedIn does not redirect you to
+      // /login; it redirects you to the SAME url and attaches a Set-Cookie
+      // that expires `li_at`. Matching only on the Location misreads that as
+      // an exotic protocol change, when it is the most ordinary failure there
+      // is: the session is gone. Judge the Set-Cookie, not the target.
+      if (clearsSessionCookie(res.headers.getSetCookie?.() ?? [])) {
+        throw new UpstreamError(
+          'session_expired',
+          'LinkedIn expired li_at on this response (logout redirect) — the session is dead; re-sync cookies from a fresh capture',
+          res.status,
+        );
       }
       // Any other redirect target is re-validated against the SSRF policy
       // before we would ever consider following it.
@@ -210,14 +270,6 @@ export class VoyagerClient {
     });
   }
 
-  /** Legacy GraphQL card route. Kept as a fallback; returns a UI component tree. */
-  async fetchCard(profileUrn: string, section: SectionKey): Promise<unknown> {
-    return this.get('/graphql', {
-      includeWebMetadata: 'true',
-      variables: `(profileUrn:${restliValue(profileUrn)},sectionType:${SECTION_TYPES[section]})`,
-      queryId: QUERY_PROFILE_CARDS,
-    });
-  }
 }
 
 /**
@@ -234,8 +286,30 @@ function describeRedirect(location: string): string {
       const verdict = checkIp(host.replace(/^\[|\]$/g, ''));
       return `${host} (${verdict.allowed ? 'public' : 'BLOCKED: ' + verdict.reason})`;
     }
-    return host;
+    // The PATH is the diagnosis, so keep it. Reporting only the hostname makes
+    // every LinkedIn-internal redirect print the same three words
+    // ("www.linkedin.com"), which is what turned a dead session into an
+    // unexplained mystery. The query string is dropped instead: it is our own
+    // request echoed back, and it is the only part likely to carry anything
+    // sensitive.
+    return `${host}${target.pathname}`;
   } catch {
     return '<unparseable location>';
   }
+}
+
+/**
+ * Does this response log us out?
+ *
+ * LinkedIn signals a rejected session by clearing `li_at` — the value is
+ * literally `delete me`, with `Max-Age=0` and a 1970 `Expires`. We match on
+ * the expiry, not the value, because the placeholder string is theirs to
+ * change and the expiry is what actually carries the meaning.
+ */
+export function clearsSessionCookie(setCookies: readonly string[]): boolean {
+  return setCookies.some(
+    (c) =>
+      /^\s*li_at\s*=/i.test(c) &&
+      (/;\s*max-age\s*=\s*0\s*(;|$)/i.test(c) || /;\s*expires\s*=[^;]*\b19[78]\d\b/i.test(c)),
+  );
 }

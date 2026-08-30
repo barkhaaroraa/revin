@@ -72,6 +72,17 @@ const EnvSchema = z.object({
    */
   UPSTREAM_MIN_INTERVAL_MS: z.coerce.number().int().nonnegative().default(40_000),
   UPSTREAM_JITTER_MS: z.coerce.number().int().nonnegative().default(15_000),
+
+  /**
+   * Optional path where an open circuit breaker is recorded, so a hard block
+   * survives a restart.
+   *
+   * Unset (the default) means the breaker is in-memory only — fine for local
+   * development, wrong for anything hosted: a crash-loop or a redeploy would
+   * silently clear a trip and resume sending requests with a flagged account.
+   * Point this at a durable volume in production.
+   */
+  BREAKER_STATE_FILE: z.string().min(1).optional(),
 });
 
 export type Config = z.infer<typeof EnvSchema>;
