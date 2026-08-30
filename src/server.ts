@@ -63,6 +63,17 @@ export async function buildServer() {
     trustProxy: true,
   });
 
+  // `POST /v1/admin/resume` carries no body, but Fastify rejects a POST whose
+  // content-type it has no parser for — including a missing one — with a 415.
+  // That turns the natural recovery command (`curl -X POST -H 'x-api-key: …'`)
+  // into a confusing failure at exactly the wrong moment: clearing a breaker
+  // that survived a restart. Accept the bodyless case, and cap it at zero bytes
+  // so this cannot become a way to smuggle an unparsed payload past the JSON
+  // parser. Routes that do want a body still validate it with Zod, so an
+  // unexpected content-type now surfaces as a 400 about the body rather than a
+  // 415 about the header.
+  app.addContentTypeParser('*', { bodyLimit: 0 }, (_request, _payload, done) => done(null, undefined));
+
   await app.register(rateLimit, {
     max: 30,
     timeWindow: '1 minute',
@@ -145,9 +156,51 @@ export async function buildServer() {
   return { app, config };
 }
 
+/**
+ * How long a shutdown may wait for in-flight work before we stop being polite.
+ *
+ * A profile fetch is slow by design — ten upstream requests, and callers can be
+ * queued behind the pacing gate — so an abrupt exit drops real work. But an
+ * unbounded wait is worse: the platform's own kill timer fires and SIGKILLs us
+ * anyway, with no chance to log why. Finish what is in flight, then go.
+ */
+const SHUTDOWN_GRACE_MS = 15_000;
+
 // Only start listening when run directly, so tests can import buildServer.
 if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
   const { app, config } = await buildServer();
+
+  // Container runtimes stop a process with SIGTERM. Node's default handler just
+  // exits, cutting every open connection mid-response; Fastify's close() drains
+  // them instead. `once` so a second signal from an impatient operator falls
+  // through to the default behaviour and kills us immediately.
+  let shuttingDown = false;
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+    process.once(signal, () => {
+      if (shuttingDown) return;
+      shuttingDown = true;
+      app.log.info({ signal }, 'shutting down: draining in-flight requests');
+
+      const forceExit = setTimeout(() => {
+        app.log.warn({ graceMs: SHUTDOWN_GRACE_MS }, 'shutdown grace period expired; exiting anyway');
+        process.exit(1);
+      }, SHUTDOWN_GRACE_MS);
+      // Do not let the timer itself keep the event loop alive once we are done.
+      forceExit.unref();
+
+      app
+        .close()
+        .then(() => {
+          clearTimeout(forceExit);
+          process.exit(0);
+        })
+        .catch((err) => {
+          app.log.error(err, 'error during shutdown');
+          process.exit(1);
+        });
+    });
+  }
+
   try {
     await app.listen({ port: config.PORT, host: config.HOST });
   } catch (err) {

@@ -6,7 +6,7 @@
 import { fetch } from 'undici';
 import { MAX_RESPONSE_BYTES, readCapped, safeAgent, SsrfBlockedError } from '../security/ssrf-agent.js';
 import { checkIp } from '../security/ip-rules.js';
-import { UpstreamCircuitBreaker } from '../security/circuit-breaker.js';
+import { createTripStore, UpstreamCircuitBreaker } from '../security/circuit-breaker.js';
 import { redact, type Config } from '../config.js';
 import { buildSession, newPageInstance, type Session } from './session.js';
 import {
@@ -93,7 +93,9 @@ export class VoyagerClient {
     deps: ClientDeps = {},
   ) {
     this.session = buildSession(config);
-    this.breaker = deps.breaker ?? new UpstreamCircuitBreaker();
+    // A breaker built here reloads any trip persisted by a previous process,
+    // so a restart cannot silently resume traffic against a flagged account.
+    this.breaker = deps.breaker ?? new UpstreamCircuitBreaker(createTripStore(config.BREAKER_STATE_FILE));
   }
 
   /**
