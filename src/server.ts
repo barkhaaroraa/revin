@@ -84,7 +84,19 @@ export async function buildServer() {
     // secret. It deliberately does NOT widen what the endpoint accepts from
     // anywhere else: SameSite=Strict means another origin cannot use it.
     const provided = request.headers['x-api-key'];
-    if (typeof provided === 'string' && keyMatches(provided, config.API_KEY)) return;
+    const hasRealKey = typeof provided === 'string' && keyMatches(provided, config.API_KEY);
+    if (hasRealKey) return;
+
+    // Admin routes control the upstream safety breaker (resume after a block).
+    // They must NOT be reachable with only a UI session cookie — that cookie is
+    // minted for anyone who loads the public homepage, and clearing a breaker is
+    // an operator action, not a page-visitor one. Real key required.
+    if ((request.url.split('?')[0] ?? '').startsWith('/v1/admin')) {
+      return reply.status(401).send({
+        error: 'admin_key_required',
+        message: 'Admin routes require a valid x-api-key header (a UI session is not sufficient).',
+      });
+    }
 
     const token = readCookie(request.headers.cookie, UI_COOKIE);
     if (verifyUiToken(token, config.API_KEY)) return;

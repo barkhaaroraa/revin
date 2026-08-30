@@ -32,6 +32,8 @@ A minimal web UI is served at `/`.
 - [Approach](#approach)
 - [Security: SSRF](#security-ssrf)
 - [Avoiding detection](#avoiding-detection)
+  - [Egress is not the application's job](#egress-is-not-the-applications-job)
+  - [What is measurably still wrong](#what-is-measurably-still-wrong)
 - [Known limitations](#known-limitations)
 - [Development](#development)
 - [Legal](#legal)
@@ -223,6 +225,17 @@ No auth. Returns `{ "status": "ok", "time": "..." }`.
 The web UI. Unauthenticated (it has to load before it can send a key); the key
 is entered in the page and kept in `localStorage` only.
 
+### `GET /v1/admin/status` · `POST /v1/admin/resume`
+
+Operator controls for the breakpoint. `status` reports whether the upstream
+circuit breaker is open and what tripped it; `resume` closes it so the next
+request is sent to LinkedIn again. Nothing else closes it — a hard block halts
+the server until a human deliberately clears it.
+
+Both require the real `x-api-key`. A UI session cookie is explicitly **not**
+sufficient: that cookie is minted for anyone who loads the homepage, and
+clearing a safety breaker is an operator action, not a page-visitor one.
+
 ---
 
 ## Approach
@@ -268,8 +281,8 @@ POST /v1/profile
    ├─ 2. Rest.li   identity/dash/profiles/<urn>?decorationId=FullProfile-76
    │                                                  → headline, summary, location, industry
    └─ 3. Rest.li   identity/dash/<collection>?q=viewee&profileUrn=<urn>
-                   × positions, educations, skills, certifications, languages,
-                     projects, publications, honors, volunteer, courses, organizations
+                   × positionGroups, positions, educations, skills,
+                     certifications, languages, projects, organizations
    │
    ├─ normalize        included[] → URN map → resolve references (cycle-safe)
    ├─ extract          anti-corruption layer → our schema
@@ -297,19 +310,36 @@ You'd split on `·` and regex-parse dates. The Rest.li collections instead retur
 disappears. It is also *more* purely reverse-engineered: raw Rest.li rather than
 a persisted GraphQL query whose hash rotates every release.
 
-How that route was found is [`progress.md` §4](./progress.md).
+The card route is not merely worse — it was never the right endpoint. Every
+`ProfileCards` call returned `HTTP 200` carrying a `PYMK_RECOMMENDATION` card,
+and LinkedIn's own `x-li-pem-metadata` request header says why:
+
+```
+voyagerIdentityDashProfiles.34ead06d…      Voyager - Profile=profile-top-card-core
+voyagerIdentityDashProfileComponents.8682… Voyager - Profile=view-content-collections-details
+voyagerIdentityDashProfileCards.aec4c260…  Voyager - Profile=profile-cards-widget-recommendations
+```
+
+The captured `queryId` is the **People-You-May-Know recommendations widget**. A
+persisted query has fixed semantics, so no `sectionType` could ever have made it
+return profile sections. That header was sitting in the capture the whole time.
+The dead route has been deleted rather than kept as a "fallback".
+
+How the working route was found is [`progress.md` §4](./progress.md).
 
 ### Layout
 
 ```
 src/
   security/   url-guard.ts · ip-rules.ts · ssrf-agent.ts     ← SSRF layers 1 & 2
+              circuit-breaker.ts · ui-session.ts             ← the breakpoint, UI auth
   linkedin/   client.ts · session.ts · queries.ts            ← the wire
               normalized.ts · extract.ts                      ← the graph, the mapping
               profile-service.ts                              ← orchestration + cache
   routes/     profile.ts                                      ← error taxonomy
   schema.ts   the public contract
-  tools/      fetch-profile · sync-cookies · diff-cookies · probe-restli
+  tools/      fetch-profile · sync-cookies · diff-cookies
+              extract-fixture · probe-restli · ping.sh
 public/       index.html (the UI)
 ```
 
@@ -427,8 +457,10 @@ similarly require a custom header.
 
 ## Avoiding detection
 
-- **Volume is the real mitigation.** ~14 upstream requests per profile, once,
-  then cached. The entire build consumed under 100 requests.
+- **Volume is the real mitigation.** 10 upstream requests per profile (1 GraphQL
+  + 1 Rest.li scalar record + 8 collections), once, then cached. The entire build
+  consumed under 100 requests. Trimming the fetched collection list from 14 to 10
+  bought ~40% more profile fetches out of the same risk budget.
 - **Fixture recording is a security control**, not a convenience. Parser work
   runs offline against saved JSON, so iterating costs zero requests.
 - **Header coherence** matters more than which browser you claim to be. UA,
@@ -436,11 +468,48 @@ similarly require a custom header.
   `x-li-page-instance` is *not* replayed — it identifies a single page view, so
   reusing one forever is itself anomalous; a fresh one is minted per profile.
 - **Pacing mirrors a browser**: sections burst within one profile view (a real
-  client fires ~14 calls in seconds), with a long jittered gap *between*
+  client fires dozens of calls in seconds), with a long jittered gap *between*
   profiles. Uniform spacing is less human, not more.
 - **Block signals abort immediately.** `HTTP 999`, `429`, `302 → /uas/login`,
-  `302 → /checkpoint` each map to a distinct error, and a block stops the run.
-  Hammering a checkpoint is how an account goes from challenged to banned.
+  `302 → /checkpoint` and `302 → /authwall` each map to a distinct error. Note
+  the split: an authwall is an access-denied **block**, while `/login` means the
+  cookie merely **expired**. They look alike and call for opposite responses —
+  one means stop and ask a human, the other means re-capture cookies.
+- **The breakpoint** (`security/circuit-breaker.ts`). The first hard block — a
+  `999`, a checkpoint, or an authwall — trips a circuit breaker. While it is
+  open every upstream call is refused *before a socket is opened*, and the block
+  persists across requests until a human calls `POST /v1/admin/resume`. Nothing
+  re-enables itself, on purpose: retrying a block doesn't recover the session,
+  it burns it, pushing an account from "challenged" to "restricted". Admin
+  routes require the real `x-api-key` — a UI session cookie is deliberately
+  insufficient to clear a safety breaker.
+
+### Egress is not the application's job
+
+There is **no proxy pool and no IP rotation** in this codebase. An earlier
+version had both; they were removed. Hiding the origin address is a network
+concern, and the operator solves it better than the app can — run the process
+behind a VPN and every request inherits it, with no proxy credentials to store,
+redact, or leak. The application keeps the controls it is actually placed to
+enforce: volume, pacing, header coherence, and the breakpoint.
+
+### What is measurably still wrong
+
+Diffing our request against the 49 captured Voyager calls in `capture/profile.har`
+turns up four divergences we have **not** fixed. Recording them beats claiming
+the client is indistinguishable:
+
+| | Browser (Firefox 154) | This client |
+|---|---|---|
+| Protocol | **HTTP/2** on 49/49 | HTTP/1.1 (undici defaults `allowH2: false`) |
+| Header order | `Host, User-Agent, Accept, Accept-Language, Accept-Encoding, x-li-*, csrf-token, …, TE` | different order entirely |
+| `accept-encoding` | `gzip, deflate, br, zstd` | not set; undici substitutes its own |
+| `te: trailers` | 49/49 | never sent |
+| `pragma`/`cache-control` | 7/49, and *not* on the `identity/dash` call | sent on every request |
+
+The protocol line is the loudest: the ALPN list in the ClientHello advertises
+HTTP/1.1-only before a single header goes out. All five are cheap to close and
+none of it is done — see limitation 4.
 
 ---
 
@@ -455,16 +524,22 @@ similarly require a custom header.
    `urn:li:fsd_employmentType:18`; the integer→label table was in no capture.
    Inferring labels from single examples would fabricate data, so the raw
    identifier is returned.
-3. **Five collections unverified.** `positions`, `educations`, `skills`,
-   `certifications`, `languages` and `projects` are confirmed against live data.
-   `publications`, `honors`, `volunteer`, `courses` and `organizations` return
-   `200` with no entities on every profile tested — no test profile has had them,
-   so "correct but empty" and "wrong name, silently empty" are indistinguishable.
-   Reported as `empty` in `coverage`, never as confirmed-absent.
-4. **TLS fingerprinting is not addressed.** LinkedIn can fingerprint the TLS
-   ClientHello (JA3), and Node's handshake does not look like a browser's
-   regardless of headers. Defeating it needs `curl-impersonate` or similar. Low
-   volume is the compensating control.
+3. **Five collections unverified.** `positionGroups`, `positions`, `educations`,
+   `skills`, `certifications`, `languages` and `projects` are confirmed against
+   live data. `publications`, `honors`, `volunteer`, `courses` and
+   `organizations` return `200` with no entities on every profile tested — no
+   test profile has had them, so "correct but empty" and "wrong name, silently
+   empty" are indistinguishable. Reported as `empty` in `coverage`, never as
+   confirmed-absent.
+4. **Client fingerprinting is not addressed**, at two levels.
+   *Transport:* LinkedIn can fingerprint the TLS ClientHello (JA3/JA4) and the
+   HTTP/2 SETTINGS frame, and Node's handshake does not look like a browser's
+   regardless of headers. Closing that needs `curl-impersonate`, CycleTLS or
+   `tls-client` — a non-Node dependency, deliberately not taken on.
+   *Protocol and headers:* the five divergences tabulated above are fixable in
+   plain undici (`allowH2: true`, an ordered header map, `accept-encoding`,
+   `te`, conditional `pragma`) and simply have not been. Low request volume
+   remains the compensating control for all of it.
 5. **Session lifetime.** `li_at` expires or is revoked; there is no automated
    re-login. Symptom: `503 session_expired`. Fix: refresh the cookie.
 6. **Login-walled data only.** Contact info, connection counts and full
@@ -482,7 +557,7 @@ similarly require a custom header.
 
 ```bash
 npm run dev          # watch mode
-npm test             # 16 tests, no network, no credentials needed
+npm test             # 24 tests, no network, no credentials needed
 npm run typecheck
 ```
 
@@ -507,7 +582,15 @@ npx tsx src/tools/diff-cookies.ts capture/x.har
 
 # Probe Rest.li collection endpoints
 npx tsx --env-file=.env src/tools/probe-restli.ts <slug>
+
+# One-request smoke test: is the session still alive?
+./src/tools/ping.sh <slug>
 ```
+
+`ping.sh` sends the *same* request the server does, reading `.env` by parsing it
+rather than sourcing it. That distinction is not pedantry — see `progress.md`
+dead end 11, where `. ./.env` silently blanked every variable after the cookie
+header and the smoke test spent a while vouching for a request nobody sends.
 
 ### Secret hygiene
 

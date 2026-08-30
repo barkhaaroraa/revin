@@ -11,10 +11,11 @@ import { TtlCache, UpstreamGate } from '../cache.js';
 import { ProfileResponseSchema, type ProfileResponse } from '../schema.js';
 import { extractProfile, type RawProfileResponses } from './extract.js';
 import { UpstreamError, VoyagerClient } from './client.js';
-import { PROFILE_COLLECTIONS, type CollectionKey } from './queries.js';
+import type { TripReason } from '../security/circuit-breaker.js';
+import { FETCHED_COLLECTIONS, type CollectionKey } from './queries.js';
 
-/** Sections fetched for every profile request. */
-const SECTIONS: readonly CollectionKey[] = Object.keys(PROFILE_COLLECTIONS) as CollectionKey[];
+/** Sections fetched for every profile request. See FETCHED_COLLECTIONS. */
+const SECTIONS: readonly CollectionKey[] = FETCHED_COLLECTIONS;
 
 export class ProfileService {
   private readonly cache: TtlCache<ProfileResponse>;
@@ -26,6 +27,22 @@ export class ProfileService {
   ) {
     this.cache = new TtlCache<ProfileResponse>(config.CACHE_TTL_SECONDS * 1000);
     this.gate = new UpstreamGate(config.UPSTREAM_MIN_INTERVAL_MS, config.UPSTREAM_JITTER_MS);
+  }
+
+  /**
+   * Human-initiated "resume" after a hard block. Closes the breaker so the next
+   * request is allowed through again, and reports exactly what is being
+   * cleared. This is the counterpart to the breakpoint: the system stops on a
+   * 999 / access-denied and will not touch LinkedIn again until this is called.
+   */
+  resumeUpstream(): { resumed: boolean; cleared: TripReason | null } {
+    const cleared = this.client.circuitBreaker.reset();
+    return { resumed: cleared !== null, cleared };
+  }
+
+  /** Current breaker state, for an operator status check. */
+  upstreamStatus() {
+    return this.client.circuitBreaker.state();
   }
 
   async getProfile(slug: string): Promise<ProfileResponse> {
